@@ -186,7 +186,7 @@ def main():
 
     with tf.Session() as sess:
         sess.run(init)
-        for i in range(3):
+        for i in range(50):
             train.run(feed_dict={x: x_train, y: y_train, D: train_data_size})
             train_err = sess.run(err, feed_dict={x: x_train, y: y_train, D: train_data_size})
             valid_err = sess.run(err, feed_dict={x: x_test, y: y_test, D: test_data_size})
