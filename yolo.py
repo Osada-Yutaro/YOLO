@@ -5,7 +5,6 @@ import random as rnd
 import tensorflow as tf
 import numpy as np
 from PIL import Image, ImageFilter
-from sklearn.model_selection import train_test_split
 
 S = 7
 B = 2
@@ -49,7 +48,7 @@ def load_dataset(train_size=0.75):
             bounding_boxes = np.hstack((bounding_boxes, np.zeros(5, dtype=float)))
         return np.hstack((bounding_boxes, confidences))
 
-    for parsed_xml in map(ET.parse, glob.glob('VOCdevkit/VOC2007/Annotations/0000*')):
+    for parsed_xml in map(ET.parse, glob.glob('VOCdevkit/VOC2007/Annotations/*')):
         width = float(parsed_xml.find('size/width').text)
         height = float(parsed_xml.find('size/height').text)
 
