@@ -1,6 +1,6 @@
 import xml.etree.ElementTree as ET
 import glob
-import random as rnd
+import gc
 
 import tensorflow as tf
 import numpy as np
@@ -13,62 +13,43 @@ INDICES = {'diningtable': 0, 'chair': 1, 'horse': 2, 'person': 3, 'tvmonitor': 4
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 keep_prob = 0.5
+BATCH_SIZE = 64
 
 
 def load_dataset(train_size=0.75):
-    input_list = []
-    output_list = []
+    D = len(glob.glob('VOCdevkit/VOC2007/Annotations/*'))
+    x_data = np.zeros((D, 448, 448, 3), dtype='float32')
+    y_data = np.zeros((D, S, S, 5*B + C), dtype='float32')
 
-    def vector_in_gridcell(width, height, objs, sx, sy):
-        bounding_boxes = np.arange(0, dtype='float32')
-        confidences = np.zeros(C, dtype='float32')
-        b = B
-        for obj in objs:
-            if b == 0:
-                continue
-
-            xmin = float(obj.find('bndbox/xmin').text)
-            ymin = float(obj.find('bndbox/ymin').text)
-            xmax = float(obj.find('bndbox/xmax').text)
-            ymax = float(obj.find('bndbox/ymax').text)
-
-            if 0 <= (xmax + xmin)/2 - sx*width/S < width/S and 0 <= (ymax + ymin)/2 - sy*height/S < height/S:
-                confidences[INDICES[obj.find('name').text]] = 1.0
-
-                bounding_boxes = np.hstack((
-                    bounding_boxes,
-                    np.array([S*(xmax + xmin)/2/width - sx,
-                              S*(ymax + ymin)/2/height - sy,
-                              (xmax - xmin)/width,
-                              (ymax - ymin)/height,
-                              1.0])))
-                b -= 1
-
-        for _ in range(b):
-            bounding_boxes = np.hstack((bounding_boxes, np.zeros(5, dtype=float)))
-        return np.hstack((bounding_boxes, confidences))
-
+    d = 0
     for parsed_xml in map(ET.parse, glob.glob('VOCdevkit/VOC2007/Annotations/*')):
         width = float(parsed_xml.find('size/width').text)
         height = float(parsed_xml.find('size/height').text)
 
-        image = Image.open('VOCdevkit/VOC2007/JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448))
-        input_list.append(np.array(image))
+        x_data[d] = np.array(Image.open('VOCdevkit/VOC2007/JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)))
 
-        output_tensor = np.zeros((S, S, 5*B + C), dtype='float32')
         for sx in range(S):
             for sy in range(S):
-                output_tensor[sx][sy] = vector_in_gridcell(width, height, parsed_xml.findall('object'), sx, sy)
-        output_list.append(output_tensor)
-    x_data = np.array(input_list, dtype='float32')
-    y_data = np.array(output_list, dtype='float32')
-    data = list(zip(x_data, y_data))
-    data_size = len(data)
-    rnd.shuffle(data)
-    x_data, y_data = map(list, zip(*data))
-    x_data = np.array(x_data)
-    y_data = np.array(y_data)
-    return x_data[0:int(data_size*train_size)], x_data[int(data_size*train_size):data_size], y_data[0:int(data_size*train_size)], y_data[int(data_size*train_size):data_size]
+                b = 0
+                for obj in parsed_xml.findall('object'):
+                    if b == B:
+                        break
+                    xmin = float(obj.find('bndbox/xmin').text)
+                    ymin = float(obj.find('bndbox/ymin').text)
+                    xmax = float(obj.find('bndbox/xmax').text)
+                    ymax = float(obj.find('bndbox/ymax').text)
+
+                    if 0 <= (xmax + xmin)/2 - sx*width/S < width/S and 0 <= (ymax + ymin)/2 - sy*height/S < height/S:
+                        y_data[d][sx][sy][5*b] = S*(xmax + xmin)/2/width - sx
+                        y_data[d][sx][sy][5*b + 1] = S*(ymax + ymin)/2/height - sy
+                        y_data[d][sx][sy][5*b + 2] = (xmax - xmin)/width
+                        y_data[d][sx][sy][5*b + 3] = (ymax - ymin)/height
+                        y_data[d][sx][sy][5*b + 4] = 1.
+
+                        b += 1
+        d += 1
+
+    return x_data[0:int(D*train_size)], x_data[int(D*train_size):D], y_data[0:int(D*train_size)], y_data[int(D*train_size):D]
 
 def weight_variable(shape):
     return tf.Variable(tf.truncated_normal(shape, stddev=0.03))
@@ -176,19 +157,32 @@ def main():
 
     y_pred = eighth_block(seventh_block(sixth_block(fifth_block(fourth_block(third_block(second_block(first_block(x))))))))
 
-    train = tf.train.GradientDescentOptimizer(1e-7).minimize(loss(y, y_pred, D))
-
     err = loss(y, y_pred, D)
+    train = tf.train.GradientDescentOptimizer(1e-7).minimize(err)
+
+    saver = tf.train.Saver()
 
     sess = tf.InteractiveSession()
     init = tf.global_variables_initializer()
 
     with tf.Session() as sess:
         sess.run(init)
-        for i in range(50):
-            train.run(feed_dict={x: x_train, y: y_train, D: train_data_size})
-            train_err = sess.run(err, feed_dict={x: x_train, y: y_train, D: train_data_size})
-            valid_err = sess.run(err, feed_dict={x: x_test, y: y_test, D: test_data_size})
-            print('epoch=%d, training error=%f, validation error=%f', i, train_err, valid_err)
+        for epoch in range(135):
+            count_train = 0
+            err_train = 0
+            while count_train < train_data_size:
+                nextcount = min(count_train + BATCH_SIZE, train_data_size)
+                sess.run(train, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train})
+                err_train += sess.run(err, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train})
+                count_train = nextcount
+
+            count_test = 0
+            err_test = 0
+            while count_test < test_data_size:
+                nextcount = min(count_test + BATCH_SIZE, test_data_size)
+                err_test += sess.run(err, feed_dict={x: x_test[count_test:nextcount], y: y_test[count_test:nextcount], D: nextcount - count_test})
+                count_test = nextcount
+            print('epoch=', epoch, ', ', 'train error=', err_train, ', ', 'validation error=', err_test, sep='')
+        saver.save(sess, 'model.ckpt')
 
 main()
