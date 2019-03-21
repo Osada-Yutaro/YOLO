@@ -12,7 +12,7 @@ INDICES = {'diningtable': 0, 'chair': 1, 'horse': 2, 'person': 3, 'tvmonitor': 4
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 64
-
+DECAY = 0.0005
 
 def load_dataset(train_size=0.75):
     D = len(glob.glob('VOCdevkit/VOC2007/Annotations/*'))
@@ -110,6 +110,22 @@ def eighth_block(x):
     w = weight_variable([4096, 7*7*30], name='w_8')
     return tf.nn.relu(tf.reshape(tf.matmul(x, w), [-1, 7, 7, 30]))
 
+def loss_w():
+    with tf.variable_scope('yolo', reuse=True):
+        err = tf.reduce_sum(tf.square(tf.get_variable('w_1')))
+        err += tf.reduce_sum(tf.square(tf.get_variable('w_2')))
+        for i in range(1, 5):
+            err += tf.reduce_sum(tf.square(tf.get_variable('w_3_' + str(i))))
+        for i in range(1, 11):
+            err += tf.reduce_sum(tf.square(tf.get_variable('w_4_' + str(i))))
+        for i in range(1, 7):
+            err += tf.reduce_sum(tf.square(tf.get_variable('w_5_' + str(i))))
+        for i in range(1, 3):
+            err += tf.reduce_sum(tf.square(tf.get_variable('w_6_' + str(i))))
+        err += tf.reduce_sum(tf.square(tf.get_variable('w_7')))
+        err += tf.reduce_sum(tf.square(tf.get_variable('w_8')))
+        return err
+
 def loss_5(output_target, output_pred):
     # 幅と高さの損失の微分係数の計算で0除算が起きないようにしている
     def size_loss_true_fn():
@@ -143,7 +159,7 @@ def loss_1(output_target, output_pred):
 def loss(output_target, output_pred, D):
     def upd(x, y):
         return x + 1, y + loss_1(output_target[x], output_pred[x])
-    return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1]
+    return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1] + DECAY*loss_w()
 
 def main():
     x_train, x_test, y_train, y_test = load_dataset()
