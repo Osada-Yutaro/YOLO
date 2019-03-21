@@ -175,7 +175,7 @@ def main():
     y_pred = eighth_block(seventh_block(sixth_block(fifth_block(fourth_block(third_block(second_block(first_block(x)))))), keep_prob))
 
     err = loss(y, y_pred, D)
-    train = tf.train.GradientDescentOptimizer(1e-7).minimize(err)
+    train = tf.train.MomentumOptimizer(1e-7, 0.9).minimize(err)
 
     saver = tf.train.Saver()
 
