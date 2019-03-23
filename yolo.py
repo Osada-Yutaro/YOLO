@@ -3,7 +3,7 @@ import glob
 
 import tensorflow as tf
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image
 
 S = 7
 B = 2
@@ -11,20 +11,20 @@ C = 20
 INDICES = {'diningtable': 0, 'chair': 1, 'horse': 2, 'person': 3, 'tvmonitor': 4, 'bird': 5, 'cow': 6, 'dog': 7, 'bottle': 8, 'pottedplant': 9, 'aeroplane': 10, 'car': 11, 'cat': 12, 'sheep': 13, 'bicycle': 14, 'sofa': 15, 'boat': 16, 'train': 17, 'motorbike': 18, 'bus': 19}
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
-BATCH_SIZE = 64
+BATCH_SIZE = 16
 DECAY = 0.0005
 
 def load_dataset(train_size=0.75):
-    D = len(glob.glob('VOCdevkit/VOC2007/Annotations/*'))
+    D = len(glob.glob('../kw_resources/VOCdevkit/VOC2007/Annotations/*'))
     x_data = np.zeros((D, 448, 448, 3), dtype='float32')
     y_data = np.zeros((D, S, S, 5*B + C), dtype='float32')
 
     d = 0
-    for parsed_xml in map(ET.parse, glob.glob('VOCdevkit/VOC2007/Annotations/*')):
+    for parsed_xml in map(ET.parse, glob.glob('../kw_resources/VOCdevkit/VOC2007/Annotations/*')):
         width = float(parsed_xml.find('size/width').text)
         height = float(parsed_xml.find('size/height').text)
 
-        x_data[d] = np.array(Image.open('VOCdevkit/VOC2007/JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)))
+        x_data[d] = np.array(Image.open('../kw_resources/VOCdevkit/VOC2007/JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)))
 
         for sx in range(S):
             for sy in range(S):
@@ -175,7 +175,9 @@ def main():
     y_pred = eighth_block(seventh_block(sixth_block(fifth_block(fourth_block(third_block(second_block(first_block(x)))))), keep_prob))
 
     err = loss(y, y_pred, D)
-    train = tf.train.MomentumOptimizer(1e-7, 0.9).minimize(err)
+    train1 = tf.train.MomentumOptimizer(1e-2, 0.9).minimize(err)
+    train2 = tf.train.MomentumOptimizer(1e-3, 0.9).minimize(err)
+    train3 = tf.train.MomentumOptimizer(1e-4, 0.9).minimize(err)
 
     saver = tf.train.Saver()
 
@@ -184,13 +186,18 @@ def main():
 
     with tf.Session() as sess:
         sess.run(init)
-        for epoch in range(1):
+        for epoch in range(135):
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
-                sess.run(train, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
+                if epoch < 75:
+                    sess.run(train1, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
+                elif epoch < 105:
+                    sess.run(train2, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
+                else:
+                    sess.run(train3, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
                 count_train = nextcount
-            if epoch%10 == 0:
+            if epoch%5 == 0:
                 count_train = 0
                 err_train = 0
                 while count_train < train_data_size:
@@ -205,6 +212,7 @@ def main():
                     err_test += sess.run(err, feed_dict={x: x_test[count_test:nextcount], y: y_test[count_test:nextcount], D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
                 print('epoch=', epoch, ', ', 'train error=', err_train, ', ', 'validation error=', err_test, sep='')
-        saver.save(sess, 'model/weights.ckpt')
+        print('epoch=', 134, ', ', 'train error=', err_train, ', ', 'validation error=', err_test, sep='')
+        saver.save(sess, '../kw_resources/model/weights.ckpt')
 
 main()
