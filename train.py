@@ -199,19 +199,8 @@ def main():
                     sess.run(train3, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
                 count_train = nextcount
             if epoch%5 == 0:
-                count_train = 0
-                err_train = 0
-                while count_train < train_data_size:
-                    nextcount = min(count_train + BATCH_SIZE, train_data_size)
-                    err_train += sess.run(loss(y, y_pred, D), feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: 1.})
-                    count_train = nextcount
-
-                count_test = 0
-                err_test = 0
-                while count_test < test_data_size:
-                    nextcount = min(count_test + BATCH_SIZE, test_data_size)
-                    err_test += sess.run(loss(y, y_pred, D), feed_dict={x: x_test[count_test:nextcount], y: y_test[count_test:nextcount], D: nextcount - count_test, keep_prob: 1.})
-                    count_test = nextcount
+                err_train = sess.run(loss(y, y_pred, D), feed_dict={x: x_train, y: y_train, D: train_data_size, keep_prob: 1.})
+                err_test = sess.run(loss(y, y_pred, D), feed_dict={x: x_test, y: y_test, D: test_data_size, keep_prob: 1.})
                 err_w = sess.run(loss_w())
                 print(epoch, err_train, err_test, err_w)
         saver.save(sess, '../kw_resources/model/weights.ckpt')
