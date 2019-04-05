@@ -159,7 +159,7 @@ def loss_1(output_target, output_pred):
 def loss(output_target, output_pred, D):
     def upd(x, y):
         return x + 1, y + loss_1(output_target[x], output_pred[x])
-    return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1] + DECAY*loss_w()
+    return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1]
 
 def main():
     x_train, x_test, y_train, y_test = load_dataset()
@@ -174,10 +174,10 @@ def main():
 
     y_pred = eighth_block(seventh_block(sixth_block(fifth_block(fourth_block(third_block(second_block(first_block(x)))))), keep_prob))
 
-    err = loss(y, y_pred, D)
-    train1 = tf.train.MomentumOptimizer(1e-2, 0.9).minimize(err)
-    train2 = tf.train.MomentumOptimizer(1e-3, 0.9).minimize(err)
-    train3 = tf.train.MomentumOptimizer(1e-4, 0.9).minimize(err)
+    err = loss(y, y_pred, D) + DECAY*loss_w()
+    train1 = tf.train.GradientDescentOptimizer(1e-2).minimize(err)
+    train2 = tf.train.GradientDescentOptimizer(1e-3).minimize(err)
+    train3 = tf.train.GradientDescentOptimizer(1e-4).minimize(err)
 
     saver = tf.train.Saver()
 
@@ -186,13 +186,14 @@ def main():
 
     with tf.Session() as sess:
         sess.run(init)
-        for epoch in range(135):
+        print('epoch, training error, test error, weight error')
+        for epoch in range(1, 136):
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
-                if epoch < 75:
+                if epoch < 76:
                     sess.run(train1, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
-                elif epoch < 105:
+                elif epoch < 106:
                     sess.run(train2, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
                 else:
                     sess.run(train3, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
@@ -202,17 +203,17 @@ def main():
                 err_train = 0
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
-                    err_train += sess.run(err, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(loss(y, y_pred, D), feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_test = 0
                 err_test = 0
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
-                    err_test += sess.run(err, feed_dict={x: x_test[count_test:nextcount], y: y_test[count_test:nextcount], D: nextcount - count_test, keep_prob: 1.})
+                    err_test += sess.run(loss(y, y_pred, D), feed_dict={x: x_test[count_test:nextcount], y: y_test[count_test:nextcount], D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
-                print('epoch=', epoch, ', ', 'train error=', err_train, ', ', 'validation error=', err_test, sep='')
-        print('epoch=', 134, ', ', 'train error=', err_train, ', ', 'validation error=', err_test, sep='')
+                err_w = sess.run(loss_w())
+                print(epoch, err_train, err_test, err_w)
         saver.save(sess, '../kw_resources/model/weights.ckpt')
 
 main()
