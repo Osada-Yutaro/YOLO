@@ -13,7 +13,7 @@ LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 16
 DECAY = 0.0005
-DATA_SIZE = 4
+DATA_SIZE = 5013
 
 parsed_xml_list = None
 
@@ -160,7 +160,7 @@ def loss_1(output_target, output_pred):
         return x + 1, y + loss_2(output_target[x], output_pred[x])
     return tf.while_loop(lambda x, y: x < S, upd, (0, 0.))[1]
 
-def loss(output_target, output_pred, D):
+def loss_d(output_target, output_pred, D):
     def upd(x, y):
         return x + 1, y + loss_1(output_target[x], output_pred[x])
     return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1]
@@ -176,7 +176,7 @@ def main():
 
     y_pred = eighth_block(seventh_block(sixth_block(fifth_block(fourth_block(third_block(second_block(first_block(x)))))), keep_prob))
 
-    err = (loss(y, y_pred, D) + DECAY*loss_w())/tf.cast(D, tf.float32)
+    err = (loss_d(y, y_pred, D) + DECAY*loss_w())/tf.cast(D, tf.float32)
     train1 = tf.train.GradientDescentOptimizer(1e-2).minimize(err)
     train2 = tf.train.GradientDescentOptimizer(1e-3).minimize(err)
     train3 = tf.train.GradientDescentOptimizer(1e-4).minimize(err)
@@ -207,7 +207,7 @@ def main():
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
                     x_train, y_train = load_dataset(count_train, nextcount)
-                    err_train += sess.run(loss(y, y_pred, D), feed_dict={x: x_train, y: y_train, D: train_data_size, keep_prob: 1.})
+                    err_train += sess.run(loss_d(y, y_pred, D), feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_test = 0
@@ -215,7 +215,7 @@ def main():
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
                     x_test, y_test = load_dataset(count_train + count_test, count_train + nextcount)
-                    err_test += sess.run(loss(y, y_pred, D), feed_dict={x: x_test, y: y_test, D: test_data_size, keep_prob: 1.})
+                    err_test += sess.run(loss_d(y, y_pred, D), feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
 
                 err_w = sess.run(loss_w())
