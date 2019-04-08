@@ -13,41 +13,45 @@ LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 16
 DECAY = 0.0005
+DATA_SIZE = 4
 
-def load_dataset(train_size=0.75):
-    D = len(glob.glob('../kw_resources/VOCdevkit/VOC2007/Annotations/*'))
-    x_data = np.zeros((D, 448, 448, 3), dtype='float32')
-    y_data = np.zeros((D, S, S, 5*B + C), dtype='float32')
+parsed_xml_list = None
 
-    d = 0
-    for parsed_xml in map(ET.parse, glob.glob('../kw_resources/VOCdevkit/VOC2007/Annotations/*')):
-        width = float(parsed_xml.find('size/width').text)
-        height = float(parsed_xml.find('size/height').text)
+def convert_X(parsed_xml):
+    return np.array(Image.open('../kw_resources/VOCdevkit/VOC2007/JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)))
 
-        x_data[d] = np.array(Image.open('../kw_resources/VOCdevkit/VOC2007/JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)))
+def convert_Y(parsed_xml):
+    width = float(parsed_xml.find('size/width').text)
+    height = float(parsed_xml.find('size/height').text)
+    y_data = np.zeros((S, S, 5*B + C), dtype='float32')
+    for sx in range(S):
+        for sy in range(S):
+            b = 0
+            for obj in parsed_xml.findall('object'):
+                if b == B:
+                    break
+                xmin = float(obj.find('bndbox/xmin').text)
+                ymin = float(obj.find('bndbox/ymin').text)
+                xmax = float(obj.find('bndbox/xmax').text)
+                ymax = float(obj.find('bndbox/ymax').text)
 
-        for sx in range(S):
-            for sy in range(S):
-                b = 0
-                for obj in parsed_xml.findall('object'):
-                    if b == B:
-                        break
-                    xmin = float(obj.find('bndbox/xmin').text)
-                    ymin = float(obj.find('bndbox/ymin').text)
-                    xmax = float(obj.find('bndbox/xmax').text)
-                    ymax = float(obj.find('bndbox/ymax').text)
+                if 0 <= (xmax + xmin)/2 - sx*width/S < width/S and 0 <= (ymax + ymin)/2 - sy*height/S < height/S:
+                    y_data[sx][sy][5*b] = S*(xmax + xmin)/2/width - sx
+                    y_data[sx][sy][5*b + 1] = S*(ymax + ymin)/2/height - sy
+                    y_data[sx][sy][5*b + 2] = (xmax - xmin)/width
+                    y_data[sx][sy][5*b + 3] = (ymax - ymin)/height
+                    y_data[sx][sy][5*b + 4] = 1.
 
-                    if 0 <= (xmax + xmin)/2 - sx*width/S < width/S and 0 <= (ymax + ymin)/2 - sy*height/S < height/S:
-                        y_data[d][sx][sy][5*b] = S*(xmax + xmin)/2/width - sx
-                        y_data[d][sx][sy][5*b + 1] = S*(ymax + ymin)/2/height - sy
-                        y_data[d][sx][sy][5*b + 2] = (xmax - xmin)/width
-                        y_data[d][sx][sy][5*b + 3] = (ymax - ymin)/height
-                        y_data[d][sx][sy][5*b + 4] = 1.
+                    b += 1
+    return y_data
 
-                        b += 1
-        d += 1
-
-    return x_data[0:int(D*train_size)], x_data[int(D*train_size):D], y_data[0:int(D*train_size)], y_data[int(D*train_size):D]
+def load_dataset(start_index, end_index):
+    global parsed_xml_list
+    if parsed_xml_list is None:
+        parsed_xml_list = list(map(ET.parse, glob.glob('../kw_resources/VOCdevkit/VOC2007/Annotations/*')))
+    x_data = np.array(list(map(convert_X, parsed_xml_list[start_index:end_index])))
+    y_data = np.array(list(map(convert_Y, parsed_xml_list[start_index:end_index])))
+    return x_data, y_data
 
 def weight_variable(shape, name):
     with tf.variable_scope('yolo', reuse=False):
@@ -104,7 +108,7 @@ def sixth_block(x):
 def seventh_block(x, keep_prob):
     w = weight_variable([7*7*1024, 4096], name='w_7')
     conn = leaky_relu(tf.matmul(tf.reshape(x, [-1, 7*7*1024]), w))
-    return tf.nn.dropout(conn, keep_prob)
+    return tf.nn.dropout(conn, rate=1-keep_prob)
 
 def eighth_block(x):
     w = weight_variable([4096, 7*7*30], name='w_8')
@@ -162,19 +166,17 @@ def loss(output_target, output_pred, D):
     return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1]
 
 def main():
-    x_train, x_test, y_train, y_test = load_dataset()
+    train_data_size = int(DATA_SIZE*0.75)
+    test_data_size = DATA_SIZE - train_data_size
 
     x = tf.placeholder(tf.float32, [None, 448, 448, 3])
     y = tf.placeholder(tf.float32, [None, S, S, 5*B + C])
     D = tf.placeholder(tf.int32)
     keep_prob = tf.placeholder(tf.float32)
 
-    train_data_size = x_train.shape[0]
-    test_data_size = x_test.shape[0]
-
     y_pred = eighth_block(seventh_block(sixth_block(fifth_block(fourth_block(third_block(second_block(first_block(x)))))), keep_prob))
 
-    err = loss(y, y_pred, D) + DECAY*loss_w()
+    err = (loss(y, y_pred, D) + DECAY*loss_w())/tf.cast(D, tf.float32)
     train1 = tf.train.GradientDescentOptimizer(1e-2).minimize(err)
     train2 = tf.train.GradientDescentOptimizer(1e-3).minimize(err)
     train3 = tf.train.GradientDescentOptimizer(1e-4).minimize(err)
@@ -191,16 +193,31 @@ def main():
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
+                x_train, y_train = load_dataset(count_train, nextcount)
                 if epoch < 76:
-                    sess.run(train1, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
+                    sess.run(train1, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
                 elif epoch < 106:
-                    sess.run(train2, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
+                    sess.run(train2, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
                 else:
-                    sess.run(train3, feed_dict={x: x_train[count_train:nextcount], y: y_train[count_train:nextcount], D: nextcount - count_train, keep_prob: .5})
+                    sess.run(train3, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
                 count_train = nextcount
             if epoch%5 == 0:
-                err_train = sess.run(loss(y, y_pred, D), feed_dict={x: x_train, y: y_train, D: train_data_size, keep_prob: 1.})
-                err_test = sess.run(loss(y, y_pred, D), feed_dict={x: x_test, y: y_test, D: test_data_size, keep_prob: 1.})
+                count_train = 0
+                err_train = 0
+                while count_train < train_data_size:
+                    nextcount = min(count_train + BATCH_SIZE, train_data_size)
+                    x_train, y_train = load_dataset(count_train, nextcount)
+                    err_train += sess.run(loss(y, y_pred, D), feed_dict={x: x_train, y: y_train, D: train_data_size, keep_prob: 1.})
+                    count_train = nextcount
+
+                count_test = 0
+                err_test = 0
+                while count_test < test_data_size:
+                    nextcount = min(count_test + BATCH_SIZE, test_data_size)
+                    x_test, y_test = load_dataset(count_train + count_test, count_train + nextcount)
+                    err_test += sess.run(loss(y, y_pred, D), feed_dict={x: x_test, y: y_test, D: test_data_size, keep_prob: 1.})
+                    count_test = nextcount
+
                 err_w = sess.run(loss_w())
                 print(epoch, err_train, err_test, err_w)
         saver.save(sess, '../kw_resources/model/weights.ckpt')
