@@ -18,8 +18,8 @@ DATA_SIZE = 5013
 
 parsed_xml_list = None
 
-def convert_X(parsed_xml):
-    return np.array(Image.open('../kw_resources/VOCdevkit/VOC2007/JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)))
+def convert_X(directory, parsed_xml):
+    return np.array(Image.open(directory + 'JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)))
 
 def convert_Y(parsed_xml):
     width = float(parsed_xml.find('size/width').text)
@@ -46,11 +46,13 @@ def convert_Y(parsed_xml):
                     b += 1
     return y_data
 
-def load_dataset(start_index, end_index):
+def load_dataset(directory, start_index, end_index):
     global parsed_xml_list
     if parsed_xml_list is None:
-        parsed_xml_list = list(map(ET.parse, glob.glob('../kw_resources/VOCdevkit/VOC2007/Annotations/*')))
-    x_data = np.array(list(map(convert_X, parsed_xml_list[start_index:end_index])))
+        if directory[-1] != '/':
+            directory = directory + '/'
+        parsed_xml_list = list(map(ET.parse, glob.glob(directory + 'Annotations/*')))
+    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list[start_index:end_index])))
     y_data = np.array(list(map(convert_Y, parsed_xml_list[start_index:end_index])))
     return x_data, y_data
 
@@ -133,7 +135,7 @@ def main():
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
-                x_train, y_train = load_dataset(count_train, nextcount)
+                x_train, y_train = load_dataset('../kw_resources/VOCdevkit/VOC2007/', count_train, nextcount)
                 if epoch < 76:
                     sess.run(train1, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
                 elif epoch < 106:
@@ -146,7 +148,7 @@ def main():
                 err_train = 0
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
-                    x_train, y_train = load_dataset(count_train, nextcount)
+                    x_train, y_train = load_dataset('../kw_resources/VOCdevkit/VOC2007/', count_train, nextcount)
                     err_train += sess.run(loss_d(y, y_pred, D), feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
@@ -154,7 +156,7 @@ def main():
                 err_test = 0
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
-                    x_test, y_test = load_dataset(count_train + count_test, count_train + nextcount)
+                    x_test, y_test = load_dataset('../kw_resources/VOCdevkit/VOC2007/', count_train + count_test, count_train + nextcount)
                     err_test += sess.run(loss_d(y, y_pred, D), feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
 
