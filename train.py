@@ -131,11 +131,12 @@ def main():
     with tf.Session() as sess:
         sess.run(init)
         print('epoch, training error, test error, weight error')
+        res_dir = '../kw_resources/VOCdevkit/VOC2007/'
         for epoch in range(1, 136):
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
-                x_train, y_train = load_dataset('../kw_resources/VOCdevkit/VOC2007/', count_train, nextcount)
+                x_train, y_train = load_dataset(res_dir, count_train, nextcount)
                 if epoch < 76:
                     sess.run(train1, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
                 elif epoch < 106:
@@ -148,7 +149,7 @@ def main():
                 err_train = 0
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
-                    x_train, y_train = load_dataset('../kw_resources/VOCdevkit/VOC2007/', count_train, nextcount)
+                    x_train, y_train = load_dataset(res_dir, count_train, nextcount)
                     err_train += sess.run(loss_d(y, y_pred, D), feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
@@ -156,7 +157,7 @@ def main():
                 err_test = 0
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
-                    x_test, y_test = load_dataset('../kw_resources/VOCdevkit/VOC2007/', count_train + count_test, count_train + nextcount)
+                    x_test, y_test = load_dataset(res_dir, count_train + count_test, count_train + nextcount)
                     err_test += sess.run(loss_d(y, y_pred, D), feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
 
