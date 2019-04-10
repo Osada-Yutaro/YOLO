@@ -12,7 +12,7 @@ C = 20
 INDICES = {'diningtable': 0, 'chair': 1, 'horse': 2, 'person': 3, 'tvmonitor': 4, 'bird': 5, 'cow': 6, 'dog': 7, 'bottle': 8, 'pottedplant': 9, 'aeroplane': 10, 'car': 11, 'cat': 12, 'sheep': 13, 'bicycle': 14, 'sofa': 15, 'boat': 16, 'train': 17, 'motorbike': 18, 'bus': 19}
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 DECAY = 0.0005
 DATA_SIZE = 5013
 
