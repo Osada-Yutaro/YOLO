@@ -109,7 +109,7 @@ def loss_d(output_target, output_pred, D):
     return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1]
 
 def main():
-    args = sys.args
+    args = sys.argv
     res_dir = args[1]
     model_dir = args[2]
     if model_dir[-1] != '/':
