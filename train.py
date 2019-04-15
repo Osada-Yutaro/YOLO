@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 import glob
+import sys
 
 import tensorflow as tf
 import numpy as np
@@ -108,6 +109,12 @@ def loss_d(output_target, output_pred, D):
     return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1]
 
 def main():
+    args = sys.args
+    res_dir = args[1]
+    model_dir = args[2]
+    if model_dir[-1] != '/':
+        model_dir = model_dir + '/'
+
     train_data_size = int(DATA_SIZE*0.75)
     test_data_size = DATA_SIZE - train_data_size
 
@@ -131,7 +138,6 @@ def main():
     with tf.Session() as sess:
         sess.run(init)
         print('epoch, training error, test error, weight error')
-        res_dir = '../kw_resources/VOCdevkit/VOC2007/'
         for epoch in range(1, 136):
             count_train = 0
             while count_train < train_data_size:
@@ -163,6 +169,6 @@ def main():
 
                 err_w = sess.run(loss_w())
                 print(epoch, err_train, err_test, err_w)
-        saver.save(sess, '../kw_resources/model/weights.ckpt')
+        saver.save(sess, model_dir + 'weights.ckpt')
 
 main()
