@@ -13,7 +13,7 @@ C = 20
 INDICES = {'diningtable': 0, 'chair': 1, 'horse': 2, 'person': 3, 'tvmonitor': 4, 'bird': 5, 'cow': 6, 'dog': 7, 'bottle': 8, 'pottedplant': 9, 'aeroplane': 10, 'car': 11, 'cat': 12, 'sheep': 13, 'bicycle': 14, 'sofa': 15, 'boat': 16, 'train': 17, 'motorbike': 18, 'bus': 19}
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 DECAY = 0.0005
 DATA_SIZE = 5011
 
@@ -126,19 +126,21 @@ def main():
     y_pred = yolo.model(x, keep_prob)
 
     err = (loss_d(y, y_pred, D) + DECAY*loss_w())/tf.cast(D, tf.float32)
-    train1 = tf.train.GradientDescentOptimizer(1e-2).minimize(err)
-    train2 = tf.train.GradientDescentOptimizer(1e-3).minimize(err)
-    train3 = tf.train.GradientDescentOptimizer(1e-4).minimize(err)
+    train1 = tf.train.GradientDescentOptimizer(1e-1).minimize(err)
+    train2 = tf.train.GradientDescentOptimizer(1e-2).minimize(err)
+    train3 = tf.train.GradientDescentOptimizer(1e-3).minimize(err)
 
     saver = tf.train.Saver()
 
     sess = tf.InteractiveSession()
     init = tf.global_variables_initializer()
 
+    x_train, y_train = load_dataset(res_dir, 0, BATCH_SIZE)
+
     with tf.Session() as sess:
         sess.run(init)
         print('epoch, training error, test error, weight error')
-        for epoch in range(1, 136):
+        for epoch in range(1):
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
