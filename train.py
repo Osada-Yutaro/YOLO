@@ -140,7 +140,7 @@ def main():
     with tf.Session() as sess:
         sess.run(init)
         print('epoch, training error, test error, weight error')
-        for epoch in range(1):
+        for epoch in range(1, 136):
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
