@@ -138,7 +138,11 @@ def main():
     x_train, y_train = load_dataset(res_dir, 0, BATCH_SIZE)
 
     with tf.Session() as sess:
-        sess.run(init)
+        ckpt = tf.train.get_checkpoint_state(model_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            saver.restore(sess, model_dir)
+        else:
+            sess.run(init)
         print('epoch, training error, test error, weight error')
         for epoch in range(1, 136):
             count_train = 0
