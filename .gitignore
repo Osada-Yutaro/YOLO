@@ -2,3 +2,4 @@ VOCdevkit/
 .DS_Store
 model/
 __pycache__/
+[Ll]og/
