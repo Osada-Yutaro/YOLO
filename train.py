@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 import glob
 import sys
+import random
 
 import tensorflow as tf
 import numpy as np
@@ -145,6 +146,7 @@ def main():
             sess.run(init)
         print('epoch, training error, test error, weight error')
         for epoch in range(1, 136):
+            random.shuffle(parsed_xml_list)
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
