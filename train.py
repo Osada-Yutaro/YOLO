@@ -127,9 +127,7 @@ def main():
     y_pred = yolo.model(x, keep_prob)
 
     err = (loss_d(y, y_pred, D) + DECAY*loss_w())/tf.cast(D, tf.float32)
-    train1 = tf.train.GradientDescentOptimizer(1e-1).minimize(err)
-    train2 = tf.train.GradientDescentOptimizer(1e-2).minimize(err)
-    train3 = tf.train.GradientDescentOptimizer(1e-3).minimize(err)
+    train = tf.train.GradientDescentOptimizer(1e-1).minimize(err)
 
     saver = tf.train.Saver()
 
@@ -145,26 +143,20 @@ def main():
         else:
             sess.run(init)
         print('epoch, training error, test error, weight error')
-        for epoch in range(1, 136):
-            random.shuffle(parsed_xml_list)
+        for epoch in range(3):
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
                 x_train, y_train = load_dataset(res_dir, count_train, nextcount)
-                if epoch < 76:
-                    sess.run(train1, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
-                elif epoch < 106:
-                    sess.run(train2, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
-                else:
-                    sess.run(train3, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
+                sess.run(train, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
                 count_train = nextcount
-            if epoch%5 == 0:
+            if True:
                 count_train = 0
                 err_train = 0
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
                     x_train, y_train = load_dataset(res_dir, count_train, nextcount)
-                    err_train += sess.run(loss_d(y, y_pred, D), feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(loss_d(y, y_pred, D)*D/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_test = 0
@@ -172,7 +164,7 @@ def main():
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
                     x_test, y_test = load_dataset(res_dir, count_train + count_test, count_train + nextcount)
-                    err_test += sess.run(loss_d(y, y_pred, D), feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_test += sess.run(loss_d(y, y_pred, D)*D/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
 
                 err_w = sess.run(loss_w())
