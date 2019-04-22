@@ -66,6 +66,6 @@ def model(x, keep_prob=1.):
         return tf.nn.dropout(conn, rate=1-keep_prob)
     def __eighth_block(x):
         w = weight_variable([4096, 7*7*30], name='w_8')
-        return tf.nn.relu(tf.reshape(tf.matmul(x, w), [-1, 7, 7, 30]))
+        return tf.nn.sigmoid(tf.reshape(tf.matmul(x, w), [-1, 7, 7, 30]))
 
     return __eighth_block(__seventh_block(__sixth_block(__fifth_block(__fourth_block(__third_block(__second_block(__first_block(x)))))), keep_prob))
