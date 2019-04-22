@@ -16,6 +16,15 @@ def max_pool(x, r, step):
     import tensorflow as tf
     return tf.nn.max_pool(x, [1, r, r, 1], [1, step, step, 1], 'SAME')
 
+def batch_normalization(x, shape, name):
+    import tensorflow as tf
+    with tf.variable_scope('yolo', reuse=False):
+        mean = tf.reduce_mean(x, axis=0)
+        variance = tf.reduce_mean(tf.square(x - mean))
+        offset = tf.get_variable(name + '_offset', initializer=tf.zeros(shape))
+        scale = tf.get_variable(name + '_scale', initializer=tf.ones(shape))
+        eps = 1e-4
+        return scale*(x - mean)/tf.square(variance + eps) + offset
 
 def model(x, keep_prob=1.):
     import tensorflow as tf
