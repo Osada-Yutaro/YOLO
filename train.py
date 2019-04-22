@@ -74,40 +74,32 @@ def loss_w():
         err += tf.reduce_sum(tf.square(tf.get_variable('w_8')))
         return err
 
-def loss_5(output_target, output_pred):
-    # 幅と高さの損失の微分係数の計算で0除算が起きないようにしている
-    def size_loss_true_fn():
-        eps = 1e-4
-        return LAMBDA_COORD*(tf.square(tf.sqrt(output_target[2] + eps) - tf.sqrt(output_pred[2] + eps)) + tf.square(tf.sqrt(output_target[3] + eps) - tf.sqrt(output_pred[3] + eps)))
-    def size_loss_false_fn():
-        return 0.
-    pos_loss = LAMBDA_COORD*output_target[4]*(tf.square(output_target[0] - output_pred[0]) + tf.square(output_target[1] - output_pred[1]))
-    size_loss = tf.cond(output_target[4] > 0.99, size_loss_true_fn, size_loss_false_fn)
-    confi_loss = output_target[4]*tf.square(output_target[4] - output_pred[4])
-    return pos_loss + size_loss + confi_loss
+def loss_d(output_target, output_pred):
+    p_target = output_target[:, :, :, 0:C]
+    x_target = output_target[:, :, :, C:5*B + C: 5]
+    y_target = output_target[:, :, :, C + 1:5*B + C: 5]
+    w_target = output_target[:, :, :, C + 2:5*B + C: 5]
+    h_target = output_target[:, :, :, C + 3:5*B + C: 5]
+    confi_target = output_target[:, :, :, C + 4:5*B + C: 5]
 
-def loss_4(output_target, output_pred):
-    return tf.reduce_sum(tf.square(output_target - output_pred))
+    p_pred = output_pred[:, :, :, 0:C]
+    x_pred = output_pred[:, :, :, C:5*B + C: 5]
+    y_pred = output_pred[:, :, :, C + 1:5*B + C: 5]
+    w_pred = output_pred[:, :, :, C + 2:5*B + C: 5]
+    h_pred = output_pred[:, :, :, C + 3:5*B + C: 5]
+    confi_pred = output_pred[:, :, :, C + 4:5*B + C: 5]
 
-def loss_3(output_target, output_pred):
-    def upd(x, y):
-        return x + 1, y + loss_4(output_target[5*x:5*(x + 1)], output_pred[5*x:5*(x + 1)])
-    return tf.while_loop(lambda x, y: x < B, upd, (0, 0.))[1] + loss_5(output_target[5*B + 1:5*B + C], output_pred[5*B + 1:5*B + C])
+    pos_err = LAMBDA_COORD*tf.reduce_sum((tf.square(x_target - x_pred) + tf.square(y_target - y_pred))*confi_target)
 
-def loss_2(output_target, output_pred):
-    def upd(x, y):
-        return x + 1, y + loss_3(output_target[x], output_pred[x])
-    return tf.while_loop(lambda x, y: x < S, upd, (0, 0.))[1]
+    eps = 1e-6*tf.ones(w_target.shape)
+    size_err = tf.reduce_sum((tf.square(tf.sqrt(w_target + eps) - tf.sqrt(w_pred + eps)) + tf.square(tf.sqrt(h_target + eps) - tf.sqrt(h_pred + eps)))*confi_target)
 
-def loss_1(output_target, output_pred):
-    def upd(x, y):
-        return x + 1, y + loss_2(output_target[x], output_pred[x])
-    return tf.while_loop(lambda x, y: x < S, upd, (0, 0.))[1]
+    confi_err_obj = tf.reduce_sum(tf.square(confi_target - confi_pred)*confi_target)
+    confi_err_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_target - confi_pred)*(tf.ones(w_target.shape) - confi_target))
 
-def loss_d(output_target, output_pred, D):
-    def upd(x, y):
-        return x + 1, y + loss_1(output_target[x], output_pred[x])
-    return tf.while_loop(lambda x, y: x < D, upd, (0, 0.))[1]
+    pred_err = tf.reduce_sum(tf.square(p_target - p_pred)*p_target)
+
+    return pos_err + size_err + confi_err_obj + confi_err_noobj + pred_err
 
 def main():
     args = sys.argv
@@ -126,7 +118,7 @@ def main():
 
     y_pred = yolo.model(x, keep_prob)
 
-    err = (loss_d(y, y_pred, D) + DECAY*loss_w())/tf.cast(D, tf.float32)
+    err = (loss_d(y, y_pred) + DECAY*loss_w())/tf.cast(D, tf.float32)
     train = tf.train.GradientDescentOptimizer(1.).minimize(err)
 
     saver = tf.train.Saver()
@@ -156,7 +148,7 @@ def main():
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
                     x_train, y_train = load_dataset(res_dir, count_train, nextcount)
-                    err_train += sess.run(loss_d(y, y_pred, D)*tf.cast(D, tf.float32)/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(loss_d(y, y_pred)/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_test = 0
@@ -164,7 +156,7 @@ def main():
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
                     x_test, y_test = load_dataset(res_dir, count_train + count_test, count_train + nextcount)
-                    err_test += sess.run(loss_d(y, y_pred, D)*tf.cast(D, tf.float32)/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_test += sess.run(loss_d(y, y_pred)/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
 
                 err_w = sess.run(loss_w())
