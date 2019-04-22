@@ -1,7 +1,7 @@
 def weight_variable(shape, name):
     import tensorflow as tf
     with tf.variable_scope('yolo', reuse=False):
-        w = tf.get_variable(name, initializer=tf.truncated_normal(shape, stddev=0.01))
+        w = tf.get_variable(name, initializer=tf.truncated_normal(shape, stddev=0.03))
         return w
 
 def conv2d(x, shape, step=1, name=None):

@@ -3,4 +3,5 @@ RUN apt-get update && apt-get install -y git
 RUN pip3 install Pillow
 RUN git clone https://github.com/Osada-Yutaro/YOLO.git
 WORKDIR /YOLO
+RUN git checkout not_learn
 CMD (python3 train.py '../kw_resources/VOCdevkit/VOC2007/' '../kw_resources/model/') > ../kw_resources/log.txt
