@@ -127,7 +127,7 @@ def main():
     y_pred = yolo.model(x, keep_prob)
 
     err = (loss_d(y, y_pred, D) + DECAY*loss_w())/tf.cast(D, tf.float32)
-    train = tf.train.GradientDescentOptimizer(1e-1).minimize(err)
+    train = tf.train.GradientDescentOptimizer(1.).minimize(err)
 
     saver = tf.train.Saver()
 
