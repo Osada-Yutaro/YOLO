@@ -22,8 +22,8 @@ $ python train.py {directory to load training and test data} {directory to save 
 
 ### Changes from paper
 * Training and validation data is VOC2007.
-* Use sigmoid activate function at last layer.
-* initial value is random number according to normal distribution $\mu=0.,\sigma=0.03$.
-* Weight decay coefficient $\lambda=5.\times10^{-5}$.
-* Batch size is $16$.
+* Use sigmoid activation function at last layer.
+* initial value is random number according to normal distribution that mean is 0 and standard deviation is 0.03.
+* Weight decay coefficient is 0.00005.
+* Batch size is 16.
 * Optimizer is a simple gradient discent optimizer.
