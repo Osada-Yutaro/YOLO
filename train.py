@@ -149,7 +149,7 @@ def main():
     with tf.Session() as sess:
         ckpt = tf.train.get_checkpoint_state(model_dir)
         if ckpt and ckpt.model_checkpoint_path:
-            saver.restore(sess, model_dir)
+            saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
         print('epoch, training error, test error, weight error')
@@ -183,5 +183,4 @@ def main():
                 print(epoch, err_train, err_test, sess.run(err_w))
         saver.save(sess, model_dir + 'weights.ckpt')
 
-np.set_printoptions(threshold=np.inf)
 main()
