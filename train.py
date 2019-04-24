@@ -144,7 +144,7 @@ def main():
     sess = tf.InteractiveSession()
     init = tf.global_variables_initializer()
 
-    x_train, y_train = load_dataset(res_dir, 0, BATCH_SIZE)
+    x_train, y_train = load_train(res_dir, 0, BATCH_SIZE)
 
     with tf.Session() as sess:
         ckpt = tf.train.get_checkpoint_state(model_dir)
