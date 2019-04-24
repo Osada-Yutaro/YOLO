@@ -137,7 +137,7 @@ def main():
 
     err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
     err_w = DECAY*loss_w()
-    train = tf.train.GradientDescentOptimizer(1e-5).minimize(err_d + err_w)
+    train = tf.train.GradientDescentOptimizer(1e-4).minimize(err_d + err_w)
 
     saver = tf.train.Saver()
 
@@ -147,11 +147,14 @@ def main():
     x_train, y_train = load_train(res_dir, 0, BATCH_SIZE)
 
     with tf.Session() as sess:
+        """
         ckpt = tf.train.get_checkpoint_state(model_dir)
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
+        """
+        sess.run(init)
         print('epoch, training error, test error, weight error')
 
         for epoch in range(1, 41):
