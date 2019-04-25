@@ -1,3 +1,8 @@
+S = 7
+B = 2
+C = 20
+INDICES = {'diningtable': 0, 'chair': 1, 'horse': 2, 'person': 3, 'tvmonitor': 4, 'bird': 5, 'cow': 6, 'dog': 7, 'bottle': 8, 'pottedplant': 9, 'aeroplane': 10, 'car': 11, 'cat': 12, 'sheep': 13, 'bicycle': 14, 'sofa': 15, 'boat': 16, 'train': 17, 'motorbike': 18, 'bus': 19}
+
 def weight_variable(shape, name):
     import tensorflow as tf
     with tf.variable_scope('yolo', reuse=False):
