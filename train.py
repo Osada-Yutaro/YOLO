@@ -15,7 +15,7 @@ INDICES = {'diningtable': 0, 'chair': 1, 'horse': 2, 'person': 3, 'tvmonitor': 4
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 16
-DECAY = 0.00005
+DECAY = 0.0002
 DATA_SIZE = 5011
 
 parsed_xml_list_train = None
