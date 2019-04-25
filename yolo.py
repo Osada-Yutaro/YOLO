@@ -32,6 +32,11 @@ def batch_normalization(x, shape, name):
         eps = 1e-4
         return scale*(x - mean)/tf.square(variance + eps) + offset
 
+def batch_normalized_conv2d(x, shape, step=1, name=None):
+    import tensorflow as tf
+    conv = conv2d(x, shape, step, name)
+    return batch_normalization(conv2d(x, shape, step, name), [conv.shape[1], conv.shape[2], conv.shape[3]], name)
+
 def model(x, keep_prob=1.):
     import tensorflow as tf
     def __first_block(x):
