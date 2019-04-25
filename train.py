@@ -111,7 +111,7 @@ def loss_d(output_target, output_pred, D):
     eps = 1e-8*tf.ones([D, S, S, B])
     size_err = tf.reduce_sum((tf.square(tf.sqrt(w_target + eps) - tf.sqrt(w_pred + eps)) + tf.square(tf.sqrt(h_target + eps) - tf.sqrt(h_pred + eps)))*confi_target)
 
-    confi_err_obj = tf.reduce_sum(tf.square(confi_target - confi_pred)*confi_target)
+    confi_err_obj = 10.*tf.reduce_sum(tf.square(confi_target - confi_pred)*confi_target)
     confi_err_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_target - confi_pred)*(tf.ones([D, S, S, B]) - confi_target))
 
     pred_err = tf.reduce_sum(tf.square(p_target - p_pred)*p_target)
