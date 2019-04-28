@@ -34,17 +34,20 @@ def convert_Y(parsed_xml):
             for obj in parsed_xml.findall('object'):
                 if b == B:
                     break
+                
+                y_data[sx][sy][INDICES[obj.find('name').text]] = 1.
+                
                 xmin = float(obj.find('bndbox/xmin').text)
                 ymin = float(obj.find('bndbox/ymin').text)
                 xmax = float(obj.find('bndbox/xmax').text)
                 ymax = float(obj.find('bndbox/ymax').text)
 
                 if 0 <= (xmax + xmin)/2 - sx*width/S < width/S and 0 <= (ymax + ymin)/2 - sy*height/S < height/S:
-                    y_data[sx][sy][5*b] = S*(xmax + xmin)/2/width - sx
-                    y_data[sx][sy][5*b + 1] = S*(ymax + ymin)/2/height - sy
-                    y_data[sx][sy][5*b + 2] = (xmax - xmin)/width
-                    y_data[sx][sy][5*b + 3] = (ymax - ymin)/height
-                    y_data[sx][sy][5*b + 4] = 1.
+                    y_data[sx][sy][C + 5*b] = xmin/width - sx
+                    y_data[sx][sy][C + 5*b + 1] = ymin/height - sy
+                    y_data[sx][sy][C + 5*b + 2] = (xmax - xmin)/width
+                    y_data[sx][sy][C + 5*b + 3] = (ymax - ymin)/height
+                    y_data[sx][sy][C + 5*b + 4] = 1.
 
                     b += 1
     return y_data
@@ -91,6 +94,45 @@ def loss_w():
         err += tf.reduce_sum(tf.square(tf.get_variable('w_8')))
         return err
 
+def pos_loss(output_target, output_pred, D):
+    x_target = output_target[:, :, :, C:5*B + C: 5]
+    y_target = output_target[:, :, :, C + 1:5*B + C: 5]
+    confi_target = output_target[:, :, :, C + 4:5*B + C: 5]
+
+    x_pred = output_pred[:, :, :, C:5*B + C: 5]
+    y_pred = output_pred[:, :, :, C + 1:5*B + C: 5]
+
+    pos_err = LAMBDA_COORD*tf.reduce_sum((tf.square(x_target - x_pred) + tf.square(y_target - y_pred))*confi_target)
+    return pos_err
+
+def size_loss(output_target, output_pred, D):
+    w_target = output_target[:, :, :, C + 2:5*B + C: 5]
+    h_target = output_target[:, :, :, C + 3:5*B + C: 5]
+    confi_target = output_target[:, :, :, C + 4:5*B + C: 5]
+
+    w_pred = output_pred[:, :, :, C + 2:5*B + C: 5]
+    h_pred = output_pred[:, :, :, C + 3:5*B + C: 5]
+
+    eps = 1e-8*tf.ones([D, S, S, B])
+    size_err = tf.reduce_sum((tf.square(tf.sqrt(w_target + eps) - tf.sqrt(w_pred + eps)) + tf.square(tf.sqrt(h_target + eps) - tf.sqrt(h_pred + eps)))*confi_target)
+    return size_err
+
+def confi_loss(output_target, output_pred, D):
+    confi_target = output_target[:, :, :, C + 4:5*B + C: 5]
+
+    confi_pred = output_pred[:, :, :, C + 4:5*B + C: 5]
+
+    confi_err_obj = tf.reduce_sum(tf.square(confi_target - confi_pred)*confi_target)
+    confi_err_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_target - confi_pred)*(tf.ones([D, S, S, B]) - confi_target))
+
+    return confi_err_obj + confi_err_noobj
+
+def class_loss(output_target, output_pred, D):
+    p_target = output_target[:, :, :, 0:C]
+    p_pred = output_pred[:, :, :, 0:C]
+    pred_err = tf.reduce_sum(tf.square(p_target - p_pred)*p_target)
+    return pred_err
+
 def loss_d(output_target, output_pred, D):
     p_target = output_target[:, :, :, 0:C]
     x_target = output_target[:, :, :, C:5*B + C: 5]
@@ -132,10 +174,16 @@ def main():
     y = tf.placeholder(tf.float32, [None, S, S, 5*B + C])
     D = tf.placeholder(tf.int32)
     keep_prob = tf.placeholder(tf.float32)
+    lr = tf.placeholder(tf.float32)
 
     y_pred = yolo.model(x, keep_prob)
 
-    err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
+    #err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
+    err_pos = pos_loss(y, y_pred, D)
+    err_size = size_loss(y, y_pred, D)
+    err_confi = confi_loss(y, y_pred, D)
+    err_class = class_loss(y, y_pred, D)
+    err_d = (err_pos + err_size + err_confi + err_class)/tf.cast(D, tf.float32)
     err_w = DECAY*loss_w()
     train = tf.train.GradientDescentOptimizer(1e-4).minimize(err_d + err_w)
 
@@ -144,7 +192,7 @@ def main():
     sess = tf.InteractiveSession()
     init = tf.global_variables_initializer()
 
-    x_train, y_train = load_train(res_dir, 0, BATCH_SIZE)
+    load_dataset(res_dir)
 
     with tf.Session() as sess:
         """
@@ -155,9 +203,9 @@ def main():
             sess.run(init)
         """
         sess.run(init)
-        print('epoch, training error, test error, weight error')
+        print('epoch, training position error, training size error, training confidence error, training classification error, training error, test position error, test size error, test confidence error, test classification error, test error, weight error')
 
-        for epoch in range(1, 41):
+        for epoch in range(1, 81):
             random.shuffle(parsed_xml_list_train)
 
             count_train = 0
@@ -169,21 +217,40 @@ def main():
 
             if epoch%5 == 0:
                 count_train = 0
+                err_pos_train = 0
+                err_size_train = 0
+                err_confi_train = 0
+                err_class_train = 0
                 err_train = 0
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
                     x_train, y_train = load_train(res_dir, count_train, nextcount)
-                    err_train += sess.run(tf.cast(D, tf.float32)*err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    yp = sess.run(y_pred, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_pos_train += sess.run(err_pos/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_size_train += sess.run(err_size/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_confi_train += sess.run(err_confi/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_class_train += sess.run(err_class/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(tf.cast(D, tf.float32)*err_d/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_test = 0
+                err_pos_test = 0
+                err_size_test = 0
+                err_confi_test = 0
+                err_class_test = 0
                 err_test = 0
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
                     x_test, y_test = load_test(res_dir, count_test, nextcount)
-                    err_test += sess.run(tf.cast(D, tf.float32)*err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    yp = sess.run(y_pred, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_pos_test += sess.run(err_pos/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_size_test += sess.run(err_size/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_confi_test += sess.run(err_confi/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_class_test += sess.run(err_class/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_test += sess.run(tf.cast(D, tf.float32)*err_d/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
-                print(epoch, err_train, err_test, sess.run(err_w))
+                print(epoch, err_test, err_pos_train, err_size_train, err_confi_train, err_class_train, err_pos_test, err_size_test, err_confi_test, err_class_test, err_test, sess.run(err_w))
         saver.save(sess, model_dir + 'weights.ckpt')
 
+np.set_printoptions(threshold=np.inf)
 main()

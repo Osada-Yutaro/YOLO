@@ -5,8 +5,8 @@ import random
 import tensorflow as tf
 import numpy as np
 from PIL import Image
+#import cv2
 import yolo
-import cv2
 
 S = yolo.S
 B = yolo.B
@@ -28,8 +28,6 @@ def model(x):
         return sess.run(y)
 
 def threshold_processing(image, pred):
-    print(pred[0, 0, 0, 24])
-    print(pred)
     for sx in range(S):
         for sy in range(S):
             max_index = np.ndarray.argmax(pred[0, sx, sy, 0:C])
@@ -42,12 +40,10 @@ def threshold_processing(image, pred):
                 h = pred[0, sx, sy, C + 5*b + 3]
                 confi = pred[0, sx, sy, C + 5*b + 4]
 
-"""
                 if threshold < confi*pc:
                     print('onject:', x, y, w, h, confi, pc, cl)
                 else:
                     print('no onject:', confi*pc)
-                    """
 
 
 def main():
