@@ -51,7 +51,6 @@ def main():
     image = np.array(Image.open(image_file).resize((448, 448)), dtype='float32')
     pred = model(np.reshape(image, (1, 448, 448, 3)))
     threshold_processing(image, pred)
-    return
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
 main()

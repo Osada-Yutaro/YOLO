@@ -6,7 +6,7 @@ REVERSE_RESOLUTION = {0: 'diningtable', 1: 'chair', 2: 'horse', 3: 'person', 4: 
 
 def weight_variable(shape, name):
     import tensorflow as tf
-    with tf.variable_scope('yolo', reuse=False):
+    with tf.variable_scope('yolo', reuse=tf.AUTO_REUSE):
         w = tf.get_variable(name, initializer=tf.truncated_normal(shape, stddev=0.03))
         return w
 
@@ -24,7 +24,7 @@ def max_pool(x, r, step):
 
 def batch_normalization(x, shape, name):
     import tensorflow as tf
-    with tf.variable_scope('yolo', reuse=False):
+    with tf.variable_scope('yolo', reuse=tf.AUTO_REUSE):
         mean = tf.reduce_mean(x, axis=0)
         variance = tf.reduce_mean(tf.square(x - mean))
         offset = tf.get_variable(name + '_offset', initializer=tf.zeros(shape))

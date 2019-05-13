@@ -34,21 +34,22 @@ def convert_Y(parsed_xml):
             for obj in parsed_xml.findall('object'):
                 if b == B:
                     break
-                
-                y_data[sx][sy][INDICES[obj.find('name').text]] = 1.
-                
+
                 xmin = float(obj.find('bndbox/xmin').text)
                 ymin = float(obj.find('bndbox/ymin').text)
                 xmax = float(obj.find('bndbox/xmax').text)
                 ymax = float(obj.find('bndbox/ymax').text)
+                xmid = (xmin + xmax)/2
+                ymid = (ymin + ymax)/2
 
-                if 0 <= (xmax + xmin)/2 - sx*width/S < width/S and 0 <= (ymax + ymin)/2 - sy*height/S < height/S:
-                    y_data[sx][sy][C + 5*b] = xmin/width - sx
-                    y_data[sx][sy][C + 5*b + 1] = ymin/height - sy
+                if sx*width/S <= xmid < (sx + 1)*width/S and sy*height/S <= ymid < (sy + 1)*height/S:
+                    y_data[sx][sy][C + 5*b] = S*xmid/width - sx
+                    y_data[sx][sy][C + 5*b + 1] = S*ymid/height - sy
                     y_data[sx][sy][C + 5*b + 2] = (xmax - xmin)/width
                     y_data[sx][sy][C + 5*b + 3] = (ymax - ymin)/height
                     y_data[sx][sy][C + 5*b + 4] = 1.
 
+                    y_data[sx][sy][INDICES[obj.find('name').text]] = 1.
                     b += 1
     return y_data
 
@@ -60,7 +61,6 @@ def load_dataset(directory):
     parsed_xml_list = list(map(ET.parse, glob.glob(directory + 'Annotations/*')))
     parsed_xml_list_train = parsed_xml_list[0:int(DATA_SIZE*0.75)]
     parsed_xml_list_test = parsed_xml_list[int(DATA_SIZE*0.75):DATA_SIZE]
-    return
 
 def load_train(directory, start_index, end_index):
     global parsed_xml_list_train
@@ -95,32 +95,32 @@ def loss_w():
         return err
 
 def pos_loss(output_target, output_pred, D):
-    x_target = output_target[:, :, :, C:5*B + C: 5]
-    y_target = output_target[:, :, :, C + 1:5*B + C: 5]
-    confi_target = output_target[:, :, :, C + 4:5*B + C: 5]
+    x_target = output_target[:, :, :, C:C + 5*B:5]
+    y_target = output_target[:, :, :, C + 1:C + 5*B:5]
+    confi_target = output_target[:, :, :, C + 4:C + 5*B:5]
 
-    x_pred = output_pred[:, :, :, C:5*B + C: 5]
-    y_pred = output_pred[:, :, :, C + 1:5*B + C: 5]
+    x_pred = output_pred[:, :, :, C:C + 5*B:5]
+    y_pred = output_pred[:, :, :, C + 1:C + 5*B:5]
 
     pos_err = LAMBDA_COORD*tf.reduce_sum((tf.square(x_target - x_pred) + tf.square(y_target - y_pred))*confi_target)
     return pos_err
 
 def size_loss(output_target, output_pred, D):
-    w_target = output_target[:, :, :, C + 2:5*B + C: 5]
-    h_target = output_target[:, :, :, C + 3:5*B + C: 5]
-    confi_target = output_target[:, :, :, C + 4:5*B + C: 5]
+    w_target = output_target[:, :, :, C + 2:C + 5*B:5]
+    h_target = output_target[:, :, :, C + 3:C + 5*B:5]
+    confi_target = output_target[:, :, :, C + 4:C + 5*B:5]
 
-    w_pred = output_pred[:, :, :, C + 2:5*B + C: 5]
-    h_pred = output_pred[:, :, :, C + 3:5*B + C: 5]
+    w_pred = output_pred[:, :, :, C + 2:C + 5*B:5]
+    h_pred = output_pred[:, :, :, C + 3:C + 5*B:5]
 
     eps = 1e-8*tf.ones([D, S, S, B])
-    size_err = tf.reduce_sum((tf.square(tf.sqrt(w_target + eps) - tf.sqrt(w_pred + eps)) + tf.square(tf.sqrt(h_target + eps) - tf.sqrt(h_pred + eps)))*confi_target)
+    size_err = LAMBDA_COORD*tf.reduce_sum((tf.square(tf.sqrt(w_target + eps) - tf.sqrt(w_pred + eps)) + tf.square(tf.sqrt(h_target + eps) - tf.sqrt(h_pred + eps)))*confi_target)
     return size_err
 
 def confi_loss(output_target, output_pred, D):
-    confi_target = output_target[:, :, :, C + 4:5*B + C: 5]
+    confi_target = output_target[:, :, :, C + 4:C + 5*B:5]
 
-    confi_pred = output_pred[:, :, :, C + 4:5*B + C: 5]
+    confi_pred = output_pred[:, :, :, C + 4:C + 5*B:5]
 
     confi_err_obj = tf.reduce_sum(tf.square(confi_target - confi_pred)*confi_target)
     confi_err_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_target - confi_pred)*(tf.ones([D, S, S, B]) - confi_target))
@@ -130,7 +130,7 @@ def confi_loss(output_target, output_pred, D):
 def class_loss(output_target, output_pred, D):
     p_target = output_target[:, :, :, 0:C]
     p_pred = output_pred[:, :, :, 0:C]
-    pred_err = tf.reduce_sum(tf.square(p_target - p_pred)*p_target)
+    pred_err = tf.reduce_sum(tf.square(p_target - p_pred)*tf.reshape(tf.reduce_max(p_target, axis=[3]), [D, S, S, 1]))
     return pred_err
 
 def loss_d(output_target, output_pred, D):
@@ -151,12 +151,12 @@ def loss_d(output_target, output_pred, D):
     pos_err = LAMBDA_COORD*tf.reduce_sum((tf.square(x_target - x_pred) + tf.square(y_target - y_pred))*confi_target)
 
     eps = 1e-8*tf.ones([D, S, S, B])
-    size_err = tf.reduce_sum((tf.square(tf.sqrt(w_target + eps) - tf.sqrt(w_pred + eps)) + tf.square(tf.sqrt(h_target + eps) - tf.sqrt(h_pred + eps)))*confi_target)
+    size_err = LAMBDA_COORD*tf.reduce_sum((tf.square(tf.sqrt(w_target + eps) - tf.sqrt(w_pred + eps)) + tf.square(tf.sqrt(h_target + eps) - tf.sqrt(h_pred + eps)))*confi_target)
 
     confi_err_obj = tf.reduce_sum(tf.square(confi_target - confi_pred)*confi_target)
     confi_err_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_target - confi_pred)*(tf.ones([D, S, S, B]) - confi_target))
 
-    pred_err = tf.reduce_sum(tf.square(p_target - p_pred)*p_target)
+    pred_err = tf.reduce_sum(tf.square(p_target - p_pred)*tf.reshape(tf.reduce_max(p_target, axis=[3]), [D, S, S, 1]))
 
     return pos_err + size_err + confi_err_obj + confi_err_noobj + pred_err
 
@@ -174,18 +174,14 @@ def main():
     y = tf.placeholder(tf.float32, [None, S, S, 5*B + C])
     D = tf.placeholder(tf.int32)
     keep_prob = tf.placeholder(tf.float32)
-    lr = tf.placeholder(tf.float32)
+    learning_rate = tf.placeholder(tf.float32)
 
+    ckpt = tf.train.get_checkpoint_state(model_dir)
     y_pred = yolo.model(x, keep_prob)
 
-    #err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
-    err_pos = pos_loss(y, y_pred, D)
-    err_size = size_loss(y, y_pred, D)
-    err_confi = confi_loss(y, y_pred, D)
-    err_class = class_loss(y, y_pred, D)
-    err_d = (err_pos + err_size + err_confi + err_class)/tf.cast(D, tf.float32)
+    err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
     err_w = DECAY*loss_w()
-    train = tf.train.GradientDescentOptimizer(1e-4).minimize(err_d + err_w)
+    train = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d + err_w)
 
     saver = tf.train.Saver()
 
@@ -194,63 +190,82 @@ def main():
 
     load_dataset(res_dir)
 
+    ckpt = tf.train.get_checkpoint_state(model_dir)
     with tf.Session() as sess:
-        """
-        ckpt = tf.train.get_checkpoint_state(model_dir)
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
-        """
-        sess.run(init)
-        print('epoch, training position error, training size error, training confidence error, training classification error, training error, test position error, test size error, test confidence error, test classification error, test error, weight error')
-
-        for epoch in range(1, 81):
+        print('epoch, training error, test error, weight error')
+        for epoch in range(1, 91):
             random.shuffle(parsed_xml_list_train)
+
+            lr = 0
+            if epoch < 31:
+                lr = 1e-3
+            elif epoch < 61:
+                lr = 1e-4
+            else:
+                lr = 1e-5
 
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
                 x_train, y_train = load_train(res_dir, count_train, nextcount)
-                sess.run(train, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5})
+                sess.run(train, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
                 count_train = nextcount
 
             if epoch%5 == 0:
                 count_train = 0
-                err_pos_train = 0
-                err_size_train = 0
-                err_confi_train = 0
-                err_class_train = 0
                 err_train = 0
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
                     x_train, y_train = load_train(res_dir, count_train, nextcount)
-                    yp = sess.run(y_pred, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
-                    err_pos_train += sess.run(err_pos/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
-                    err_size_train += sess.run(err_size/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
-                    err_confi_train += sess.run(err_confi/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
-                    err_class_train += sess.run(err_class/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
-                    err_train += sess.run(tf.cast(D, tf.float32)*err_d/train_data_size, feed_dict={y_pred: yp, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(tf.cast(D, tf.float32)*err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_test = 0
-                err_pos_test = 0
-                err_size_test = 0
-                err_confi_test = 0
-                err_class_test = 0
                 err_test = 0
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
                     x_test, y_test = load_test(res_dir, count_test, nextcount)
-                    yp = sess.run(y_pred, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
-                    err_pos_test += sess.run(err_pos/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
-                    err_size_test += sess.run(err_size/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
-                    err_confi_test += sess.run(err_confi/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
-                    err_class_test += sess.run(err_class/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
-                    err_test += sess.run(tf.cast(D, tf.float32)*err_d/test_data_size, feed_dict={y_pred: yp, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_test += sess.run(tf.cast(D, tf.float32)*err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
-                print(epoch, err_test, err_pos_train, err_size_train, err_confi_train, err_class_train, err_pos_test, err_size_test, err_confi_test, err_class_test, err_test, sess.run(err_w))
+
+                print(epoch, err_test, err_test, sess.run(err_w))
         saver.save(sess, model_dir + 'weights.ckpt')
+
+def test():
+    args = sys.argv
+    res_dir = args[1]
+    model_dir = args[2]
+    if model_dir[-1] != '/':
+        model_dir = model_dir + '/'
+
+    x = tf.placeholder(tf.float32, [None, 448, 448, 3])
+    keep_prob = tf.placeholder(tf.float32)
+
+    ckpt = tf.train.get_checkpoint_state(model_dir)
+    y_pred = yolo.model(x, keep_prob)
+
+    saver = tf.train.Saver()
+
+    sess = tf.InteractiveSession()
+    init = tf.global_variables_initializer()
+
+    load_dataset(res_dir)
+
+    ckpt = tf.train.get_checkpoint_state(model_dir)
+    with tf.Session() as sess:
+        if ckpt and ckpt.model_checkpoint_path:
+            saver.restore(sess, model_dir + 'weights.ckpt')
+        else:
+            sess.run(init)
+        x1, y1 = load_train(res_dir, 0, 1)
+        print(y1)
+        print(sess.run(y_pred, feed_dict={x: x1, keep_prob: 1.}))
+
 
 np.set_printoptions(threshold=np.inf)
 main()
+test()
