@@ -197,16 +197,14 @@ def main():
         else:
             sess.run(init)
         print('epoch, training error, test error, weight error')
-        for epoch in range(1, 91):
+        for epoch in range(1, 301):
             random.shuffle(parsed_xml_list_train)
 
             lr = 0
-            if epoch < 31:
+            if epoch < 151:
                 lr = 1e-3
-            elif epoch < 61:
-                lr = 1e-4
             else:
-                lr = 1e-5
+                lr = 1e-4
 
             count_train = 0
             while count_train < train_data_size:
@@ -232,21 +230,33 @@ def main():
                     err_test += sess.run(tf.cast(D, tf.float32)*err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
 
-                print(epoch, err_test, err_test, sess.run(err_w))
+                print(epoch, err_train, err_test, sess.run(err_w))
         saver.save(sess, model_dir + 'weights.ckpt')
 
-def test():
+def show_error_detail():
     args = sys.argv
     res_dir = args[1]
     model_dir = args[2]
     if model_dir[-1] != '/':
         model_dir = model_dir + '/'
 
+    train_data_size = int(DATA_SIZE*0.75)
+    test_data_size = DATA_SIZE - train_data_size
+
     x = tf.placeholder(tf.float32, [None, 448, 448, 3])
+    y = tf.placeholder(tf.float32, [None, S, S, 5*B + C])
+    D = tf.placeholder(tf.int32)
     keep_prob = tf.placeholder(tf.float32)
 
     ckpt = tf.train.get_checkpoint_state(model_dir)
     y_pred = yolo.model(x, keep_prob)
+
+    err_pos = pos_loss(y, y_pred, D)/tf.cast(D, tf.float32)
+    err_size = size_loss(y, y_pred, D)/tf.cast(D, tf.float32)
+    err_confi = confi_loss(y, y_pred, D)/tf.cast(D, tf.float32)
+    err_class = class_loss(y, y_pred, D)/tf.cast(D, tf.float32)
+    err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
+    err_w = DECAY*loss_w()
 
     saver = tf.train.Saver()
 
@@ -261,11 +271,41 @@ def test():
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
-        x1, y1 = load_train(res_dir, 0, 1)
-        print(y1)
-        print(sess.run(y_pred, feed_dict={x: x1, keep_prob: 1.}))
+        print('epoch, training error, test error, weight error')
 
+        count_train = 0
+        err_pos_train = 0
+        err_size_train = 0
+        err_confi_train = 0
+        err_class_train = 0
+        err_train = 0
+        while count_train < train_data_size:
+            nextcount = min(count_train + BATCH_SIZE, train_data_size)
+            x_train, y_train = load_train(res_dir, count_train, nextcount)
+            err_pos_train += sess.run(tf.cast(D, tf.float32)*err_pos/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+            err_size_train += sess.run(tf.cast(D, tf.float32)*err_size/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+            err_confi_train += sess.run(tf.cast(D, tf.float32)*err_confi/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+            err_class_train += sess.run(tf.cast(D, tf.float32)*err_class/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+            err_train += sess.run(tf.cast(D, tf.float32)*err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+            count_train = nextcount
+
+        count_test = 0
+        err_pos_test = 0
+        err_size_test = 0
+        err_confi_test = 0
+        err_class_test = 0
+        err_test = 0
+        while count_test < test_data_size:
+            nextcount = min(count_test + BATCH_SIZE, test_data_size)
+            x_test, y_test = load_test(res_dir, count_test, nextcount)
+            err_pos_test += sess.run(tf.cast(D, tf.float32)*err_pos/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+            err_size_test += sess.run(tf.cast(D, tf.float32)*err_size/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+            err_confi_test += sess.run(tf.cast(D, tf.float32)*err_confi/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+            err_class_test += sess.run(tf.cast(D, tf.float32)*err_class/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+            err_test += sess.run(tf.cast(D, tf.float32)*err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+            count_test = nextcount
+        print(err_pos_train, err_size_train, err_confi_train, err_class_train, err_train)
+        print(err_pos_test, err_size_test, err_confi_test, err_class_test, err_test)
 
 np.set_printoptions(threshold=np.inf)
 main()
-test()
