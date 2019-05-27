@@ -80,3 +80,210 @@ def model(x, keep_prob=1.):
         return tf.nn.sigmoid(tf.reshape(tf.matmul(x, w), [-1, 7, 7, 30]))
 
     return __eighth_block(__seventh_block(__sixth_block(__fifth_block(__fourth_block(__third_block(__second_block(__first_block(x)))))), keep_prob))
+
+LAMBDA_COORD = 5.0
+LAMBDA_NOOBJ = 0.5
+BATCH_SIZE = 16
+DECAY = 0.0002
+DATA_SIZE = 5011
+
+parsed_xml_list_train = None
+parsed_xml_list_test = None
+
+def convert_X(directory, parsed_xml):
+    import numpy as np
+    from PIL import Image
+    return np.array(Image.open(directory + 'JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)), dtype='float32')
+
+def convert_Y(parsed_xml):
+    import numpy as np
+    width = float(parsed_xml.find('size/width').text)
+    height = float(parsed_xml.find('size/height').text)
+    y_data = np.zeros((S, S, 5*B + C), dtype='float32')
+    for sx in range(S):
+        for sy in range(S):
+            b = 0
+            for obj in parsed_xml.findall('object'):
+                if b == B:
+                    break
+
+                xmin = float(obj.find('bndbox/xmin').text)
+                ymin = float(obj.find('bndbox/ymin').text)
+                xmax = float(obj.find('bndbox/xmax').text)
+                ymax = float(obj.find('bndbox/ymax').text)
+                xmid = (xmin + xmax)/2
+                ymid = (ymin + ymax)/2
+
+                if sx*width/S <= xmid < (sx + 1)*width/S and sy*height/S <= ymid < (sy + 1)*height/S:
+                    y_data[sx][sy][C + 5*b] = S*xmid/width - sx
+                    y_data[sx][sy][C + 5*b + 1] = S*ymid/height - sy
+                    y_data[sx][sy][C + 5*b + 2] = (xmax - xmin)/width
+                    y_data[sx][sy][C + 5*b + 3] = (ymax - ymin)/height
+                    y_data[sx][sy][C + 5*b + 4] = 1.
+
+                    y_data[sx][sy][INDICES[obj.find('name').text]] = 1.
+                    b += 1
+    return y_data
+
+def load_dataset(directory, rate=0.75):
+    import xml.etree.ElementTree as ET
+    import glob
+
+    global parsed_xml_list_train
+    global parsed_xml_list_test
+    if directory[-1] != '/':
+        directory = directory + '/'
+    parsed_xml_list = list(map(ET.parse, glob.glob(directory + 'Annotations/*')))
+    parsed_xml_list_train = parsed_xml_list[0:int(DATA_SIZE*rate)]
+    parsed_xml_list_test = parsed_xml_list[int(DATA_SIZE*rate):DATA_SIZE]
+
+def load_train(directory, start_index, end_index):
+    import numpy as np
+    global parsed_xml_list_train
+    if parsed_xml_list_train is None:
+        load_dataset(directory)
+    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_train[start_index:end_index])))
+    y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+    return x_data, y_data
+
+def load_test(directory, start_index, end_index):
+    import numpy as np
+    global parsed_xml_list_test
+    if parsed_xml_list_test is None:
+        load_dataset(directory)
+    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_train[start_index:end_index])))
+    y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+    return x_data, y_data
+
+def loss_w():
+    import tensorflow as tf
+    with tf.variable_scope('yolo', reuse=True):
+        err = tf.reduce_sum(tf.square(tf.get_variable('w_1')))
+        err += tf.reduce_sum(tf.square(tf.get_variable('w_2')))
+        for i in range(1, 5):
+            err += tf.reduce_sum(tf.square(tf.get_variable('w_3_' + str(i))))
+        for i in range(1, 11):
+            err += tf.reduce_sum(tf.square(tf.get_variable('w_4_' + str(i))))
+        for i in range(1, 7):
+            err += tf.reduce_sum(tf.square(tf.get_variable('w_5_' + str(i))))
+        for i in range(1, 3):
+            err += tf.reduce_sum(tf.square(tf.get_variable('w_6_' + str(i))))
+        err += tf.reduce_sum(tf.square(tf.get_variable('w_7')))
+        err += tf.reduce_sum(tf.square(tf.get_variable('w_8')))
+        return err
+
+def position_loss(trgt, pred, D):
+    import tensorflow as tf
+    x_trgt = trgt[:, :, :, C:C + 5*B:5]
+    y_trgt = trgt[:, :, :, C + 1:C + 5*B:5]
+    confi_trgt = trgt[:, :, :, C + 4:C + 5*B:5]
+
+    x_pred = pred[:, :, :, C:C + 5*B:5]
+    y_pred = pred[:, :, :, C + 1:C + 5*B:5]
+
+    x_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(x_trgt - x_pred)*confi_trgt)
+    y_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(y_trgt - y_pred)*confi_trgt)
+    return x_loss + y_loss
+
+def size_loss(trgt, pred, D):
+    import tensorflow as tf
+    w_trgt = trgt[:, :, :, C + 2:C + 5*B:5]
+    h_trgt = trgt[:, :, :, C + 3:C + 5*B:5]
+    confi_trgt = trgt[:, :, :, C + 4:C + 5*B:5]
+
+    w_pred = pred[:, :, :, C + 2:C + 5*B:5]
+    h_pred = pred[:, :, :, C + 3:C + 5*B:5]
+
+    eps = 1e-8*tf.ones([D, S, S, B])
+    w_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(w_trgt + eps) - tf.sqrt(w_pred + eps))*confi_trgt)
+    h_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt)
+    return w_loss + h_loss
+
+def confidence_loss(trgt, pred, D):
+    import tensorflow as tf
+    confi_trgt = trgt[:, :, :, C + 4:C + 5*B:5]
+
+    confi_pred = pred[:, :, :, C + 4:C + 5*B:5]
+
+    confi_loss_obj = tf.reduce_sum(tf.square(confi_trgt - confi_pred)*confi_trgt)
+    confi_loss_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_trgt - confi_pred)*(tf.ones([D, S, S, B]) - confi_trgt))
+
+    return confi_loss_obj + confi_loss_noobj
+
+def class_loss(trgt, pred, D):
+    import tensorflow as tf
+    p_trgt = trgt[:, :, :, 0:C]
+    p_pred = pred[:, :, :, 0:C]
+    pred_loss = tf.reduce_sum(tf.square(p_trgt - p_pred)*tf.reshape(tf.reduce_max(p_trgt, axis=[3]), [D, S, S, 1]))
+    return pred_loss
+
+def loss_d(trgt, pred, D):
+    return position_loss(trgt, pred, D) + size_loss(trgt, pred, D) + confidence_loss(trgt, pred, D) + class_loss(trgt, pred, D)
+
+def train(res_dir, model_dir, epoch_size=100, lr=1e-3):
+    import random
+
+    import tensorflow as tf
+
+    if model_dir[-1] != '/':
+        model_dir = model_dir + '/'
+
+    train_data_size = int(DATA_SIZE*0.75)
+    test_data_size = DATA_SIZE - train_data_size
+
+    x = tf.placeholder(tf.float32, [None, 448, 448, 3])
+    y = tf.placeholder(tf.float32, [None, S, S, 5*B + C])
+    D = tf.placeholder(tf.int32)
+    keep_prob = tf.placeholder(tf.float32)
+    learning_rate = tf.placeholder(tf.float32)
+
+    ckpt = tf.train.get_checkpoint_state(model_dir)
+    y_pred = model(x, keep_prob)
+
+    err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
+    err_w = DECAY*loss_w()
+    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d + err_w)
+
+    saver = tf.train.Saver()
+
+    sess = tf.InteractiveSession()
+    init = tf.global_variables_initializer()
+
+    load_dataset(res_dir)
+
+    ckpt = tf.train.get_checkpoint_state(model_dir)
+    with tf.Session() as sess:
+        if ckpt and ckpt.model_checkpoint_path:
+            saver.restore(sess, model_dir + 'weights.ckpt')
+        else:
+            sess.run(init)
+        print('epoch, training error, test error, weight error')
+        for epoch in range(1, epoch_size + 1):
+            random.shuffle(parsed_xml_list_train)
+
+            count_train = 0
+            while count_train < train_data_size:
+                nextcount = min(count_train + BATCH_SIZE, train_data_size)
+                x_train, y_train = load_train(res_dir, count_train, nextcount)
+                sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
+                count_train = nextcount
+
+            if epoch%5 == 0:
+                count_train = 0
+                err_train = 0
+                while count_train < train_data_size:
+                    nextcount = min(count_train + BATCH_SIZE, train_data_size)
+                    x_train, y_train = load_train(res_dir, count_train, nextcount)
+                    err_train += sess.run(tf.cast(D, tf.float32)*err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    count_train = nextcount
+
+                count_test = 0
+                err_test = 0
+                while count_test < test_data_size:
+                    nextcount = min(count_test + BATCH_SIZE, test_data_size)
+                    x_test, y_test = load_test(res_dir, count_test, nextcount)
+                    err_test += sess.run(tf.cast(D, tf.float32)*err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    count_test = nextcount
+
+                print(epoch, err_train, err_test, sess.run(err_w))
+        saver.save(sess, model_dir + 'weights.ckpt')
