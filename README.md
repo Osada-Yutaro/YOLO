@@ -10,7 +10,7 @@ Implementation of [YOLO](https://arxiv.org/abs/1506.02640).
 
 ## Training
 ```
-$ python train.py {directory to load training and test data} {directory to save model}
+$ python train.py {directory to load training and test data} {directory to save model} {epoch size} {learnign rate}
 ```
 
 ### Data directory structure
