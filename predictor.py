@@ -5,7 +5,7 @@ import random
 import tensorflow as tf
 import numpy as np
 from PIL import Image
-#import cv2
+import cv2
 import yolo
 
 S = yolo.S
@@ -27,7 +27,27 @@ def model(x):
         saver.restore(sess, model_dir + 'weights.ckpt')
         return sess.run(y)
 
+def bounding_box(img, bb, cl, color):
+    img_cp = np.copy(img)
+
+    x, y, w, h = bb
+
+    height = img_cp.shape[0]
+    width = img_cp.shape[1]
+
+    xmin = max(int((x - w*0.5)*width), 0)
+    xmax = min(int((x + w*0.5)*width), width - 1)
+    ymin = max(int((y - h*0.5)*height), 0)
+    ymax = min(int((y + h*0.5)*height), height - 1)
+    cv2.line(img_cp, (xmin, ymin), (xmin, ymax), color, 1)
+    cv2.line(img_cp, (xmin, ymax), (xmax, ymax), color, 1)
+    cv2.line(img_cp, (xmax, ymax), (xmax, ymin), color, 1)
+    cv2.line(img_cp, (xmax, ymin), (xmin, ymin), color, 1)
+    cv2.putText(img_cp, cl, (xmin, ymin), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 2)
+    return img_cp
+
 def threshold_processing(image, pred):
+    img_cp = np.copy(image)
     for sx in range(S):
         for sy in range(S):
             max_index = np.ndarray.argmax(pred[0, sx, sy, 0:C])
@@ -41,16 +61,18 @@ def threshold_processing(image, pred):
                 confi = pred[0, sx, sy, C + 5*b + 4]
 
                 if threshold < confi*pc:
+                    img_cp = bounding_box(img_cp, (x, y, w, h), cl, (0, 255, 0))
                     print('onject:', x, y, w, h, confi, pc, cl)
-                else:
-                    print('no onject:', confi*pc)
+    return img_cp
 
+def main(imagefile):
+    image = np.array(Image.open(imagefile).resize((448, 448)), dtype='float32')
+    pred = model(np.reshape(image, [1, 448, 448, 3]))
+    img_cvt = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    res = threshold_processing(img_cvt, pred)
+    cv2.imwrite('predict.png', res)
 
-def main():
-    image_file = sys.argv[1]
-    image = np.array(Image.open(image_file).resize((448, 448)), dtype='float32')
-    pred = model(np.reshape(image, (1, 448, 448, 3)))
-    threshold_processing(image, pred)
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
-main()
+args = sys.argv
+main(args[1])

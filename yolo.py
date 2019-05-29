@@ -29,8 +29,8 @@ def batch_normalization(x, shape, name):
         variance = tf.reduce_mean(tf.square(x - mean))
         offset = tf.get_variable(name + '_offset', initializer=tf.zeros(shape))
         scale = tf.get_variable(name + '_scale', initializer=tf.ones(shape))
-        eps = 1e-4
-        return scale*(x - mean)/tf.square(variance + eps) + offset
+        eps = 1e-2
+        return tf.nn.batch_normalization(x, mean, variance, offset, scale, eps)
 
 def batch_normalized_conv2d(x, shape, step=1, name=None):
     import tensorflow as tf
@@ -77,14 +77,14 @@ def model(x, keep_prob=1.):
         return tf.nn.dropout(conn, rate=1-keep_prob)
     def __eighth_block(x):
         w = weight_variable([4096, 7*7*30], name='w_8')
-        return tf.nn.sigmoid(tf.reshape(tf.matmul(x, w), [-1, 7, 7, 30]))
+        return tf.reshape(tf.matmul(x, w), [-1, 7, 7, 30])
 
     return __eighth_block(__seventh_block(__sixth_block(__fifth_block(__fourth_block(__third_block(__second_block(__first_block(x)))))), keep_prob))
 
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 16
-DECAY = 0.0002
+DECAY = 0.0005
 DATA_SIZE = 5011
 
 parsed_xml_list_train = None
@@ -93,7 +93,7 @@ parsed_xml_list_test = None
 def convert_X(directory, parsed_xml):
     import numpy as np
     from PIL import Image
-    return np.array(Image.open(directory + 'JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448)), dtype='float32')
+    return Image.open(directory + 'JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448))
 
 def convert_Y(parsed_xml):
     import numpy as np
@@ -125,7 +125,17 @@ def convert_Y(parsed_xml):
                     b += 1
     return y_data
 
-def load_dataset(directory, rate=0.75):
+def random_adjust(img):
+    import random
+    import numpy as np
+    from PIL import Image
+    from PIL import ImageEnhance
+    return np.asarray(ImageEnhance.Color(ImageEnhance.Brightness(img).enhance(random.random() + 0.5)).enhance(random.random() + 0.5), dtype='float32')
+
+def random_shift(x, y):
+    width, height = x.shape[0], x.shape[1]
+
+def load_dataset(directory):
     import xml.etree.ElementTree as ET
     import glob
 
@@ -133,16 +143,16 @@ def load_dataset(directory, rate=0.75):
     global parsed_xml_list_test
     if directory[-1] != '/':
         directory = directory + '/'
-    parsed_xml_list = list(map(ET.parse, glob.glob(directory + 'Annotations/*')))
-    parsed_xml_list_train = parsed_xml_list[0:int(DATA_SIZE*rate)]
-    parsed_xml_list_test = parsed_xml_list[int(DATA_SIZE*rate):DATA_SIZE]
+    parsed_xml_list_train = list(map(ET.parse, glob.glob(directory + 'Annotations/Train/*')))
+    parsed_xml_list_test = list(map(ET.parse, glob.glob(directory + 'Annotations/Test/*')))
+    DATA_SIZE = len(parsed_xml_list_train) + len(parsed_xml_list_test)
 
 def load_train(directory, start_index, end_index):
     import numpy as np
     global parsed_xml_list_train
     if parsed_xml_list_train is None:
         load_dataset(directory)
-    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_train[start_index:end_index])))
+    x_data = np.array(list(map(lambda xml: random_adjust(convert_X(directory, xml)), parsed_xml_list_train[start_index:end_index])))
     y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
     return x_data, y_data
 
@@ -151,8 +161,8 @@ def load_test(directory, start_index, end_index):
     global parsed_xml_list_test
     if parsed_xml_list_test is None:
         load_dataset(directory)
-    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_train[start_index:end_index])))
-    y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+    x_data = np.array(list(map(lambda xml: np.asarray(convert_X(directory, xml), dtype='float32'), parsed_xml_list_test[start_index:end_index])), dtype='float32')
+    y_data = np.array(list(map(convert_Y, parsed_xml_list_test[start_index:end_index])))
     return x_data, y_data
 
 def loss_w():
@@ -191,10 +201,10 @@ def size_loss(trgt, pred, D):
     h_trgt = trgt[:, :, :, C + 3:C + 5*B:5]
     confi_trgt = trgt[:, :, :, C + 4:C + 5*B:5]
 
-    w_pred = pred[:, :, :, C + 2:C + 5*B:5]
-    h_pred = pred[:, :, :, C + 3:C + 5*B:5]
+    w_pred = tf.nn.relu(pred[:, :, :, C + 2:C + 5*B:5])
+    h_pred = tf.nn.relu(pred[:, :, :, C + 3:C + 5*B:5])
 
-    eps = 1e-8*tf.ones([D, S, S, B])
+    eps = 1e-4*tf.ones([D, S, S, B])
     w_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(w_trgt + eps) - tf.sqrt(w_pred + eps))*confi_trgt)
     h_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt)
     return w_loss + h_loss
@@ -220,16 +230,12 @@ def class_loss(trgt, pred, D):
 def loss_d(trgt, pred, D):
     return position_loss(trgt, pred, D) + size_loss(trgt, pred, D) + confidence_loss(trgt, pred, D) + class_loss(trgt, pred, D)
 
-def train(res_dir, model_dir, epoch_size=100, lr=1e-3):
+def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
     import random
-
     import tensorflow as tf
 
     if model_dir[-1] != '/':
         model_dir = model_dir + '/'
-
-    train_data_size = int(DATA_SIZE*0.75)
-    test_data_size = DATA_SIZE - train_data_size
 
     x = tf.placeholder(tf.float32, [None, 448, 448, 3])
     y = tf.placeholder(tf.float32, [None, S, S, 5*B + C])
@@ -240,9 +246,9 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3):
     ckpt = tf.train.get_checkpoint_state(model_dir)
     y_pred = model(x, keep_prob)
 
-    err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
+    err_d = loss_d(y, y_pred, D)
     err_w = DECAY*loss_w()
-    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d + err_w)
+    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d/tf.cast(D, tf.float32) + err_w)
 
     saver = tf.train.Saver()
 
@@ -251,30 +257,51 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3):
 
     load_dataset(res_dir)
 
+    train_data_size = len(parsed_xml_list_train)
+    test_data_size = len(parsed_xml_list_test)
+
+
     ckpt = tf.train.get_checkpoint_state(model_dir)
     with tf.Session() as sess:
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
+        count_train = 0
+        err_train = 0
+        while count_train < train_data_size:
+            nextcount = min(count_train + BATCH_SIZE, train_data_size)
+            x_train, y_train = load_train(res_dir, count_train, nextcount)
+            err_train += sess.run(err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+            count_train = nextcount
+
+        count_test = 0
+        err_test = 0
+        while count_test < test_data_size:
+            nextcount = min(count_test + BATCH_SIZE, test_data_size)
+            x_test, y_test = load_test(res_dir, count_test, nextcount)
+            err_test += sess.run(err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+            count_test = nextcount
+        print(0, err_train, err_test, sess.run(err_w))
+
         print('epoch, training error, test error, weight error')
-        for epoch in range(1, epoch_size + 1):
+        for epoch in range(start_epoch, start_epoch + epoch_size):
             random.shuffle(parsed_xml_list_train)
 
             count_train = 0
             while count_train < train_data_size:
                 nextcount = min(count_train + BATCH_SIZE, train_data_size)
                 x_train, y_train = load_train(res_dir, count_train, nextcount)
-                sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
+                sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1., learning_rate: lr})
                 count_train = nextcount
 
-            if epoch%5 == 0:
+            if epoch%1 == 0:
                 count_train = 0
                 err_train = 0
                 while count_train < train_data_size:
                     nextcount = min(count_train + BATCH_SIZE, train_data_size)
                     x_train, y_train = load_train(res_dir, count_train, nextcount)
-                    err_train += sess.run(tf.cast(D, tf.float32)*err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_test = 0
@@ -282,7 +309,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3):
                 while count_test < test_data_size:
                     nextcount = min(count_test + BATCH_SIZE, test_data_size)
                     x_test, y_test = load_test(res_dir, count_test, nextcount)
-                    err_test += sess.run(tf.cast(D, tf.float32)*err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_test += sess.run(err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
 
                 print(epoch, err_train, err_test, sess.run(err_w))

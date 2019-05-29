@@ -10,7 +10,7 @@ Implementation of [YOLO](https://arxiv.org/abs/1506.02640).
 
 ## Training
 ```
-$ python train.py {directory to load training and test data} {directory to save model} {epoch size} {learnign rate}
+$ python train.py {directory to load training and test data} {directory to save model} {epoch size} {learnign rate} {start epoch}
 ```
 
 ### Data directory structure
@@ -28,6 +28,5 @@ $ python predictor.py {image file} {directory model is saved}
 
 ### Changes from paper
 * Training and validation data is VOC2007.
-* Use sigmoid activation function at last layer.
 * Batch size is 16.
 * Optimizer is a simple gradient discent optimizer.
