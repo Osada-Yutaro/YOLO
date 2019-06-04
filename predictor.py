@@ -4,7 +4,6 @@ import random
 
 import tensorflow as tf
 import numpy as np
-from PIL import Image
 import cv2
 import yolo
 
@@ -66,7 +65,7 @@ def threshold_processing(image, pred):
     return img_cp
 
 def main(imagefile):
-    image = np.array(Image.open(imagefile).resize((448, 448)), dtype='float32')
+    image = cv2.resize(cv2.imread(imagefile).astype(np.float32), dsize=(448, 448))
     pred = model(np.reshape(image, [1, 448, 448, 3]))
     img_cvt = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     res = threshold_processing(img_cvt, pred)
