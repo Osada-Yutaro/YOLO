@@ -29,13 +29,13 @@ def batch_normalization(x, shape, name):
         variance = tf.reduce_mean(tf.square(x - mean))
         offset = tf.get_variable(name + '_offset', initializer=tf.zeros(shape))
         scale = tf.get_variable(name + '_scale', initializer=tf.ones(shape))
-        eps = 1e-2
+        eps = 1e-4
         return tf.nn.batch_normalization(x, mean, variance, offset, scale, eps)
 
 def batch_normalized_conv2d(x, shape, step=1, name=None):
     import tensorflow as tf
     conv = conv2d(x, shape, step, name)
-    return batch_normalization(conv2d(x, shape, step, name), [conv.shape[1], conv.shape[2], conv.shape[3]], name)
+    return batch_normalization(conv2d(x, shape, step, name), conv.shape[1:], name)
 
 def model(x, keep_prob=1.):
     import tensorflow as tf
@@ -77,7 +77,7 @@ def model(x, keep_prob=1.):
         return tf.nn.dropout(conn, rate=1-keep_prob)
     def __eighth_block(x):
         w = weight_variable([4096, 7*7*30], name='w_8')
-        return tf.reshape(tf.matmul(x, w), [-1, 7, 7, 30])
+        return tf.nn.relu(tf.reshape(tf.matmul(x, w), [-1, 7, 7, 30]))
 
     return __eighth_block(__seventh_block(__sixth_block(__fifth_block(__fourth_block(__third_block(__second_block(__first_block(x)))))), keep_prob))
 
@@ -86,15 +86,15 @@ LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 16
 DECAY = 0.0005
 TRAIN_DATA_SIZE = 0
-TEST_DATA_SIZE = 0
+VALIDATION_DATA_SIZE = 0
 
 parsed_xml_list_train = None
-parsed_xml_list_test = None
+parsed_xml_list_validation = None
 
 def convert_X(directory, parsed_xml):
     import numpy as np
     import cv2
-    return cv2.resize(cv2.imread(directory + 'JPEGImages/' + parsed_xml.find('filename').text).astype(np.float32), dsize=(448, 448))
+    return cv2.resize(cv2.imread(directory + 'JPEGImages/' + parsed_xml.find('filename').text), dsize=(448, 448))
 
 def convert_Y(parsed_xml):
     import numpy as np
@@ -130,15 +130,17 @@ def random_adjust(img):
     import random
     import numpy as np
     import cv2
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
     hsv[:, :, 1] *= random.random()/2 + 1.0
     hsv[:, :, 2] *= random.random()/2 + 1.0
+    hsv = np.minimum(hsv, 255.).astype(np.uint8)
     return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
 def random_shift(inp, oup):
     import random
     import numpy as np
     import cv2
+
     width = 448
     height = 448
     x_min = int(width*random.random()/10)
@@ -156,52 +158,52 @@ def random_shift(inp, oup):
         for sy in range(S):
             for b in range(B):
                 boundingbox = oup[sx, sy, C + 5*b: C + 5*b + 5]
-                x_mid = sx*width/S + boundingbox[0]*width/S
-                y_mid = sy*height/S + boundingbox[1]*height/S
+                x_mid = (sx + boundingbox[0])*width/S
+                y_mid = (sy + boundingbox[1])*height/S
 
-                left = x_mid - (boundingbox[2]/2)*width/S
-                right = x_mid + (boundingbox[2]/2)*width/S
-                up = y_mid - (boundingbox[3]/2)*height/S
-                down = y_mid + (boundingbox[3]/2)*height/S
+                left = x_mid - boundingbox[2]*width/2
+                right = x_mid + boundingbox[2]*width/2
+                up = y_mid - boundingbox[3]*height/2
+                down = y_mid + boundingbox[3]*height/2
 
-                if x_min < right < x_max or x_min < left < x_max:
+                if (boundingbox[4] == 1.) and (x_min < right < x_max or x_min < left < x_max) and (y_min < down < y_max or y_min < up < y_max):
                     l_new = max(left, x_min)
                     r_new = min(right, x_max)
+                    u_new = max(up, y_min)
+                    d_new = min(down, y_max)
 
-                    if y_min < down < y_max or y_min < up < y_max:
-                        d_new = max(up, y_min)
-                        u_new = min(down, y_max)
+                    x_mid_new = ((l_new + r_new)/2 - x_min)*S/W_new
+                    y_mid_new = ((d_new + u_new)/2 - y_min)*S/H_new
+                    w_new = (r_new - l_new)/W_new
+                    h_new = (d_new - u_new)/H_new
 
-                        x_mid_new = ((l_new + r_new)/2 - x_min)/W_new
-                        y_mid_new = ((d_new + u_new)/2 - y_min)/H_new
-                        w_new = (r_new - l_new)/W_new
-                        h_new = (d_new - u_new)/H_new
+                    sx_new = int(x_mid_new)
+                    sy_new = int(y_mid_new)
 
-                        sx_new = int(x_mid_new)
-                        sy_new = int(y_mid_new)
+                    oup_new[sx_new, sy_new, C + 5*b + 0] = x_mid_new - sx_new
+                    oup_new[sx_new, sy_new, C + 5*b + 1] = y_mid_new - sy_new
+                    oup_new[sx_new, sy_new, C + 5*b + 2] = w_new
+                    oup_new[sx_new, sy_new, C + 5*b + 3] = h_new
+                    oup_new[sx_new, sy_new, C + 5*b + 4] = 1.
 
-                        oup_new[sx_new, sy_new, C + 5*b + 0] = x_mid_new - sx_new
-                        oup_new[sx_new, sy_new, C + 5*b + 1] = y_mid_new - sy_new
-                        oup_new[sx_new, sy_new, C + 5*b + 2] = w_new
-                        oup_new[sx_new, sy_new, C + 5*b + 3] = h_new
-                        oup_new[sx_new, sy_new, C + 5*b + 4] = 1.
+                    oup_new[sx_new, sy_new, 0:C] = np.maximum(oup[sx, sy, 0:C], oup_new[sx_new, sy_new, 0:C])
 
-                        oup_new[sx_new, sy_new, 0:C] = np.maximum(oup[sx, sy, 0:C], oup_new[sx_new, sy_new, 0:C])
     return inp_new, oup_new
-
 
 def load_dataset(directory):
     import xml.etree.ElementTree as ET
     import glob
 
     global parsed_xml_list_train
-    global parsed_xml_list_test
+    global parsed_xml_list_validation
+    global TRAIN_DATA_SIZE
+    global VALIDATION_DATA_SIZE
     if directory[-1] != '/':
         directory = directory + '/'
     parsed_xml_list_train = list(map(ET.parse, glob.glob(directory + 'Annotations/Train/*')))
-    parsed_xml_list_test = list(map(ET.parse, glob.glob(directory + 'Annotations/Test/*')))
+    parsed_xml_list_validation = list(map(ET.parse, glob.glob(directory + 'Annotations/Validation/*')))
     TRAIN_DATA_SIZE = len(parsed_xml_list_train)
-    TEST_DATA_SIZE = len(parsed_xml_list_test)
+    VALIDATION_DATA_SIZE = len(parsed_xml_list_train)
 
 def load_train(directory, start_index, end_index):
     import numpy as np
@@ -210,16 +212,19 @@ def load_train(directory, start_index, end_index):
         load_dataset(directory)
     x_data = np.array(list(map(lambda xml: random_adjust(convert_X(directory, xml)), parsed_xml_list_train[start_index:end_index])))
     y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+
+    for i in range(end_index - start_index):
+        x_data[i], y_data[i] = random_shift(x_data[i], y_data[i])
     return x_data, y_data
 
-def load_test(directory, start_index, end_index):
+def load_validation(directory, start_index, end_index):
     import numpy as np
-    global parsed_xml_list_test
-    if parsed_xml_list_test is None:
+    global parsed_xml_list_validation
+    if parsed_xml_list_validation is None:
         load_dataset(directory)
-    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_test[start_index:end_index])), dtype='float32')
-    y_data = np.array(list(map(convert_Y, parsed_xml_list_test[start_index:end_index])))
-    return x_data, y_data
+    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_validation[start_index:end_index])))
+    y_data = np.array(list(map(convert_Y, parsed_xml_list_validation[start_index:end_index])))
+    return x_data.astype(np.float32), y_data
 
 def loss_w():
     import tensorflow as tf
@@ -260,7 +265,7 @@ def size_loss(trgt, pred, D):
     w_pred = tf.nn.relu(pred[:, :, :, C + 2:C + 5*B:5])
     h_pred = tf.nn.relu(pred[:, :, :, C + 3:C + 5*B:5])
 
-    eps = 1e-4*tf.ones([D, S, S, B])
+    eps = 1e-8*tf.ones([D, S, S, B])
     w_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(w_trgt + eps) - tf.sqrt(w_pred + eps))*confi_trgt)
     h_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt)
     return w_loss + h_loss
@@ -299,11 +304,12 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
     keep_prob = tf.placeholder(tf.float32)
     learning_rate = tf.placeholder(tf.float32)
 
+    ckpt = tf.train.get_checkpoint_state(model_dir)
     y_pred = model(x, keep_prob)
 
-    err_d = loss_d(y, y_pred, D)
+    err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
     err_w = DECAY*loss_w()
-    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d/tf.cast(D, tf.float32) + err_w)
+    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d + err_w)
 
     saver = tf.train.Saver()
 
@@ -318,8 +324,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
-
-        print('epoch, training error, test error, weight error')
+        print('epoch, training error, validation error, weight error')
         for epoch in range(start_epoch, start_epoch + epoch_size):
             random.shuffle(parsed_xml_list_train)
 
@@ -327,7 +332,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
             while count_train < TRAIN_DATA_SIZE:
                 nextcount = min(count_train + BATCH_SIZE, TRAIN_DATA_SIZE)
                 x_train, y_train = load_train(res_dir, count_train, nextcount)
-                sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1., learning_rate: lr})
+                sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
                 count_train = nextcount
 
             if epoch%1 == 0:
@@ -336,16 +341,16 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
                 while count_train < TRAIN_DATA_SIZE:
                     nextcount = min(count_train + BATCH_SIZE, TRAIN_DATA_SIZE)
                     x_train, y_train = load_train(res_dir, count_train, nextcount)
-                    err_train += sess.run(err_d/TRAIN_DATA_SIZE, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(tf.cast(D, tf.float32)*err_d/TRAIN_DATA_SIZE, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
-                count_test = 0
-                err_test = 0
-                while count_test < TEST_DATA_SIZE:
-                    nextcount = min(count_test + BATCH_SIZE, TEST_DATA_SIZE)
-                    x_test, y_test = load_test(res_dir, count_test, nextcount)
-                    err_test += sess.run(err_d/TEST_DATA_SIZE, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
-                    count_test = nextcount
+                count_validation = 0
+                err_validation = 0
+                while count_validation < VALIDATION_DATA_SIZE:
+                    nextcount = min(count_validation + BATCH_SIZE, VALIDATION_DATA_SIZE)
+                    x_validation, y_validation = load_validation(res_dir, count_validation, nextcount)
+                    err_validation += sess.run(tf.cast(D, tf.float32)*err_d/VALIDATION_DATA_SIZE, feed_dict={x: x_validation, y: y_validation, D: nextcount - count_validation, keep_prob: 1.})
+                    count_validation = nextcount
 
-                print(epoch, err_train, err_test, sess.run(err_w))
+                print(epoch, err_train, err_validation, sess.run(err_w))
         saver.save(sess, model_dir + 'weights.ckpt')

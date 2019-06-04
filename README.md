@@ -27,6 +27,5 @@ $ python predictor.py {image file} {directory model is saved}
 ```
 
 ### Changes from paper
-* Training and validation data is VOC2007.
 * Batch size is 16.
 * Optimizer is a simple gradient discent optimizer.

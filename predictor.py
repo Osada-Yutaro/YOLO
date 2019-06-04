@@ -49,7 +49,7 @@ def threshold_processing(image, pred):
     img_cp = np.copy(image)
     for sx in range(S):
         for sy in range(S):
-            max_index = np.ndarray.argmax(pred[0, sx, sy, 0:C])
+            max_index = np.ndarray.argmax(pred[sx, sy, 0:C])
             pc = pred[0, sx, sy, 0:C][max_index]
             cl = REVERSE_RESOLUTION[max_index]
             for b in range(B):
@@ -67,8 +67,7 @@ def threshold_processing(image, pred):
 def main(imagefile):
     image = cv2.resize(cv2.imread(imagefile).astype(np.float32), dsize=(448, 448))
     pred = model(np.reshape(image, [1, 448, 448, 3]))
-    img_cvt = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    res = threshold_processing(img_cvt, pred)
+    res = threshold_processing(image[0], pred[0])
     cv2.imwrite('predict.png', res)
 
 
