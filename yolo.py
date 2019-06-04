@@ -85,15 +85,16 @@ LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 16
 DECAY = 0.0005
-DATA_SIZE = 5011
+TRAIN_DATA_SIZE = 0
+TEST_DATA_SIZE = 0
 
 parsed_xml_list_train = None
 parsed_xml_list_test = None
 
 def convert_X(directory, parsed_xml):
     import numpy as np
-    from PIL import Image
-    return Image.open(directory + 'JPEGImages/' + parsed_xml.find('filename').text).resize((448, 448))
+    import cv2
+    return cv2.resize(cv2.imread(directory + 'JPEGImages/' + parsed_xml.find('filename').text).astype(np.float32), dsize=(448, 448))
 
 def convert_Y(parsed_xml):
     import numpy as np
@@ -128,12 +129,66 @@ def convert_Y(parsed_xml):
 def random_adjust(img):
     import random
     import numpy as np
-    from PIL import Image
-    from PIL import ImageEnhance
-    return np.asarray(ImageEnhance.Color(ImageEnhance.Brightness(img).enhance(random.random() + 0.5)).enhance(random.random() + 0.5), dtype='float32')
+    import cv2
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    hsv[:, :, 1] *= random.random()/2 + 1.0
+    hsv[:, :, 2] *= random.random()/2 + 1.0
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
-def random_shift(x, y):
-    width, height = x.shape[0], x.shape[1]
+def random_shift(inp, oup):
+    import random
+    import numpy as np
+    import cv2
+    width = 448
+    height = 448
+    x_min = int(width*random.random()/10)
+    x_max = int(width*(random.random()/10 + 0.9))
+    y_min = int(height*random.random()/10)
+    y_max = int(height*(random.random()/10 + 0.9))
+
+    W_new = x_max - x_min
+    H_new = y_max - y_min
+
+    inp_new = cv2.resize(inp[x_min:x_max, y_min:y_max, :], dsize=(448, 448))
+    oup_new = np.zeros([7, 7, 30], dtype='float32')
+
+    for sx in range(S):
+        for sy in range(S):
+            for b in range(B):
+                boundingbox = oup[sx, sy, C + 5*b: C + 5*b + 5]
+                x_mid = sx*width/S + boundingbox[0]*width/S
+                y_mid = sy*height/S + boundingbox[1]*height/S
+
+                left = x_mid - (boundingbox[2]/2)*width/S
+                right = x_mid + (boundingbox[2]/2)*width/S
+                up = y_mid - (boundingbox[3]/2)*height/S
+                down = y_mid + (boundingbox[3]/2)*height/S
+
+                if x_min < right < x_max or x_min < left < x_max:
+                    l_new = max(left, x_min)
+                    r_new = min(right, x_max)
+
+                    if y_min < down < y_max or y_min < up < y_max:
+                        d_new = max(up, y_min)
+                        u_new = min(down, y_max)
+
+                        x_mid_new = ((l_new + r_new)/2 - x_min)/W_new
+                        y_mid_new = ((d_new + u_new)/2 - y_min)/H_new
+                        w_new = (r_new - l_new)/W_new
+                        h_new = (d_new - u_new)/H_new
+
+                        sx_new = int(x_mid_new)
+                        sy_new = int(y_mid_new)
+
+                        oup_new[sx_new, sy_new, C + 5*b + 0] = x_mid_new - sx_new
+                        oup_new[sx_new, sy_new, C + 5*b + 1] = y_mid_new - sy_new
+                        oup_new[sx_new, sy_new, C + 5*b + 2] = w_new
+                        oup_new[sx_new, sy_new, C + 5*b + 3] = h_new
+                        oup_new[sx_new, sy_new, C + 5*b + 4] = 1.
+
+                        oup_new[sx_new, sy_new, 0:C] = np.maximum(oup[sx, sy, 0:C], oup_new[sx_new, sy_new, 0:C])
+    return inp_new, oup_new
+
 
 def load_dataset(directory):
     import xml.etree.ElementTree as ET
@@ -145,7 +200,8 @@ def load_dataset(directory):
         directory = directory + '/'
     parsed_xml_list_train = list(map(ET.parse, glob.glob(directory + 'Annotations/Train/*')))
     parsed_xml_list_test = list(map(ET.parse, glob.glob(directory + 'Annotations/Test/*')))
-    DATA_SIZE = len(parsed_xml_list_train) + len(parsed_xml_list_test)
+    TRAIN_DATA_SIZE = len(parsed_xml_list_train)
+    TEST_DATA_SIZE = len(parsed_xml_list_test)
 
 def load_train(directory, start_index, end_index):
     import numpy as np
@@ -161,7 +217,7 @@ def load_test(directory, start_index, end_index):
     global parsed_xml_list_test
     if parsed_xml_list_test is None:
         load_dataset(directory)
-    x_data = np.array(list(map(lambda xml: np.asarray(convert_X(directory, xml), dtype='float32'), parsed_xml_list_test[start_index:end_index])), dtype='float32')
+    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_test[start_index:end_index])), dtype='float32')
     y_data = np.array(list(map(convert_Y, parsed_xml_list_test[start_index:end_index])))
     return x_data, y_data
 
@@ -243,7 +299,6 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
     keep_prob = tf.placeholder(tf.float32)
     learning_rate = tf.placeholder(tf.float32)
 
-    ckpt = tf.train.get_checkpoint_state(model_dir)
     y_pred = model(x, keep_prob)
 
     err_d = loss_d(y, y_pred, D)
@@ -257,40 +312,20 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
 
     load_dataset(res_dir)
 
-    train_data_size = len(parsed_xml_list_train)
-    test_data_size = len(parsed_xml_list_test)
-
-
     ckpt = tf.train.get_checkpoint_state(model_dir)
     with tf.Session() as sess:
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
-        count_train = 0
-        err_train = 0
-        while count_train < train_data_size:
-            nextcount = min(count_train + BATCH_SIZE, train_data_size)
-            x_train, y_train = load_train(res_dir, count_train, nextcount)
-            err_train += sess.run(err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
-            count_train = nextcount
-
-        count_test = 0
-        err_test = 0
-        while count_test < test_data_size:
-            nextcount = min(count_test + BATCH_SIZE, test_data_size)
-            x_test, y_test = load_test(res_dir, count_test, nextcount)
-            err_test += sess.run(err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
-            count_test = nextcount
-        print(0, err_train, err_test, sess.run(err_w))
 
         print('epoch, training error, test error, weight error')
         for epoch in range(start_epoch, start_epoch + epoch_size):
             random.shuffle(parsed_xml_list_train)
 
             count_train = 0
-            while count_train < train_data_size:
-                nextcount = min(count_train + BATCH_SIZE, train_data_size)
+            while count_train < TRAIN_DATA_SIZE:
+                nextcount = min(count_train + BATCH_SIZE, TRAIN_DATA_SIZE)
                 x_train, y_train = load_train(res_dir, count_train, nextcount)
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1., learning_rate: lr})
                 count_train = nextcount
@@ -298,18 +333,18 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
             if epoch%1 == 0:
                 count_train = 0
                 err_train = 0
-                while count_train < train_data_size:
-                    nextcount = min(count_train + BATCH_SIZE, train_data_size)
+                while count_train < TRAIN_DATA_SIZE:
+                    nextcount = min(count_train + BATCH_SIZE, TRAIN_DATA_SIZE)
                     x_train, y_train = load_train(res_dir, count_train, nextcount)
-                    err_train += sess.run(err_d/train_data_size, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(err_d/TRAIN_DATA_SIZE, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_test = 0
                 err_test = 0
-                while count_test < test_data_size:
-                    nextcount = min(count_test + BATCH_SIZE, test_data_size)
+                while count_test < TEST_DATA_SIZE:
+                    nextcount = min(count_test + BATCH_SIZE, TEST_DATA_SIZE)
                     x_test, y_test = load_test(res_dir, count_test, nextcount)
-                    err_test += sess.run(err_d/test_data_size, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
+                    err_test += sess.run(err_d/TEST_DATA_SIZE, feed_dict={x: x_test, y: y_test, D: nextcount - count_test, keep_prob: 1.})
                     count_test = nextcount
 
                 print(epoch, err_train, err_test, sess.run(err_w))
