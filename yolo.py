@@ -203,7 +203,7 @@ def load_dataset(directory):
     parsed_xml_list_train = list(map(ET.parse, glob.glob(directory + 'Annotations/Train/*')))
     parsed_xml_list_validation = list(map(ET.parse, glob.glob(directory + 'Annotations/Validation/*')))
     TRAIN_DATA_SIZE = len(parsed_xml_list_train)
-    VALIDATION_DATA_SIZE = len(parsed_xml_list_train)
+    VALIDATION_DATA_SIZE = len(parsed_xml_list_validation)
 
 def load_train(directory, start_index, end_index):
     import numpy as np
