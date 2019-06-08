@@ -190,6 +190,22 @@ def random_shift(inp, oup):
 
     return inp_new, oup_new
 
+def random_reverse(inp, oup):
+    import random
+    import numpy as np
+    import cv2
+    if random.randint(0, 255)%2 == 0:
+        new_oup = np.zeros(S, S, C + 5*B)
+        for sx in range(S):
+            for sy in range(S):
+                new_oup[sx, sy, :] = oup[S - sx - 1, S - sy - 1, :]
+                for b in range(B):
+                    new_oup[sx, sy, C + 5*b + 0] = 1. - new_oup[sx, sy, C + 5*b + 0]
+                    new_oup[sx, sy, C + 5*b + 1] = 1. - new_oup[sx, sy, C + 5*b + 1]
+        return cv2.flip(inp, 1), new_oup
+    return inp, oup
+
+
 def load_dataset(directory):
     import xml.etree.ElementTree as ET
     import glob
@@ -335,7 +351,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
                 count_train = nextcount
 
-            if epoch%1 == 0:
+            if epoch%5 == 0:
                 count_train = 0
                 err_train = 0
                 while count_train < TRAIN_DATA_SIZE:
