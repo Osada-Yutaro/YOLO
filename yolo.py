@@ -116,13 +116,13 @@ def convert_Y(parsed_xml):
                 ymid = (ymin + ymax)/2
 
                 if sx*width/S <= xmid < (sx + 1)*width/S and sy*height/S <= ymid < (sy + 1)*height/S:
-                    y_data[sx][sy][C + 5*b] = S*xmid/width - sx
-                    y_data[sx][sy][C + 5*b + 1] = S*ymid/height - sy
-                    y_data[sx][sy][C + 5*b + 2] = (xmax - xmin)/width
-                    y_data[sx][sy][C + 5*b + 3] = (ymax - ymin)/height
-                    y_data[sx][sy][C + 5*b + 4] = 1.
+                    y_data[sx, sy, C + 5*b] = S*xmid/width - sx
+                    y_data[sx, sy, C + 5*b + 1] = S*ymid/height - sy
+                    y_data[sx, sy, C + 5*b + 2] = (xmax - xmin)/width
+                    y_data[sx, sy, C + 5*b + 3] = (ymax - ymin)/height
+                    y_data[sx, sy, C + 5*b + 4] = 1.
 
-                    y_data[sx][sy][INDICES[obj.find('name').text]] = 1.
+                    y_data[sx, sy, INDICES[obj.find('name').text]] = 1.
                     b += 1
     return y_data
 
@@ -195,16 +195,10 @@ def random_reverse(inp, oup):
     import numpy as np
     import cv2
     if random.randint(0, 255)%2 == 0:
-        new_oup = np.zeros(S, S, C + 5*B)
-        for sx in range(S):
-            for sy in range(S):
-                new_oup[sx, sy, :] = oup[S - sx - 1, S - sy - 1, :]
-                for b in range(B):
-                    new_oup[sx, sy, C + 5*b + 0] = 1. - new_oup[sx, sy, C + 5*b + 0]
-                    new_oup[sx, sy, C + 5*b + 1] = 1. - new_oup[sx, sy, C + 5*b + 1]
-        return cv2.flip(inp, 1), new_oup
+        eye = np.eye(30, dtype='float32')[C] + np.eye(30, dtype='float32')[C + 5]
+        ones = np.ones(30, dtype='float32')
+        return cv2.flip(inp, 1), np.apply_along_axis(lambda x: (ones - eye)*x - eye*x + eye, 2, np.flip(oup, 0))
     return inp, oup
-
 
 def load_dataset(directory):
     import xml.etree.ElementTree as ET
@@ -231,6 +225,7 @@ def load_train(directory, start_index, end_index):
 
     for i in range(end_index - start_index):
         x_data[i], y_data[i] = random_shift(x_data[i], y_data[i])
+        x_data[i], y_data[i] = random_reverse(x_data[i], y_data[i])
     return x_data, y_data
 
 def load_validation(directory, start_index, end_index):
