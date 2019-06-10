@@ -50,14 +50,14 @@ def threshold_processing(image, pred):
     for sx in range(S):
         for sy in range(S):
             max_index = np.ndarray.argmax(pred[sx, sy, 0:C])
-            pc = pred[0, sx, sy, 0:C][max_index]
+            pc = pred[sx, sy, 0:C][max_index]
             cl = REVERSE_RESOLUTION[max_index]
             for b in range(B):
-                x = (sx + pred[0, sx, sy, C + 5*b])/S
-                y = (sy + pred[0, sx, sy, C + 5*b + 1])/S
-                w = pred[0, sx, sy, C + 5*b + 2]
-                h = pred[0, sx, sy, C + 5*b + 3]
-                confi = pred[0, sx, sy, C + 5*b + 4]
+                x = (sx + pred[sx, sy, C + 5*b])/S
+                y = (sy + pred[sx, sy, C + 5*b + 1])/S
+                w = pred[sx, sy, C + 5*b + 2]
+                h = pred[sx, sy, C + 5*b + 3]
+                confi = pred[sx, sy, C + 5*b + 4]
 
                 if threshold < confi*pc:
                     img_cp = bounding_box(img_cp, (x, y, w, h), cl, (0, 255, 0))
@@ -65,10 +65,13 @@ def threshold_processing(image, pred):
     return img_cp
 
 def main(imagefile):
-    image = cv2.resize(cv2.imread(imagefile).astype(np.float32), dsize=(448, 448))
-    pred = model(np.reshape(image, [1, 448, 448, 3]))
-    res = threshold_processing(image[0], pred[0])
-    cv2.imwrite('predict.png', res)
+    #image = cv2.resize(cv2.imread(imagefile).astype(np.float32), dsize=(448, 448))
+    #pred = model(np.reshape(image, [1, 448, 448, 3]))
+    image, pred = yolo.load_validation('VOCdevkit/VOC2007/', 0, 1)
+    po, nya = yolo.random_reverse(image[0], pred[0])
+    res = threshold_processing(po, nya)
+    #res = threshold_processing(image[0], pred[0])
+    cv2.imwrite('predict2.png', res)
 
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)

@@ -131,8 +131,8 @@ def random_adjust(img):
     import numpy as np
     import cv2
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
-    hsv[:, :, 1] *= random.random()/2 + 1.0
-    hsv[:, :, 2] *= random.random()/2 + 1.0
+    hsv[:, :, 1] *= random.random() + 0.5
+    hsv[:, :, 2] *= random.random() + 0.5
     hsv = np.minimum(hsv, 255.).astype(np.uint8)
     return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
@@ -215,18 +215,22 @@ def load_dataset(directory):
     TRAIN_DATA_SIZE = len(parsed_xml_list_train)
     VALIDATION_DATA_SIZE = len(parsed_xml_list_validation)
 
-def load_train(directory, start_index, end_index):
+def load_train(directory, start_index, end_index, pre_pro=True):
     import numpy as np
     global parsed_xml_list_train
     if parsed_xml_list_train is None:
         load_dataset(directory)
-    x_data = np.array(list(map(lambda xml: random_adjust(convert_X(directory, xml)), parsed_xml_list_train[start_index:end_index])))
-    y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+    if pre_pro:
+        x_data = np.array(list(map(lambda xml: random_adjust(convert_X(directory, xml)), parsed_xml_list_train[start_index:end_index])))
+        y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+        for i in range(end_index - start_index):
+            x_data[i], y_data[i] = random_shift(x_data[i], y_data[i])
+            x_data[i], y_data[i] = random_reverse(x_data[i], y_data[i])
+        return x_data.astype(np.float32), y_data
 
-    for i in range(end_index - start_index):
-        x_data[i], y_data[i] = random_shift(x_data[i], y_data[i])
-        x_data[i], y_data[i] = random_reverse(x_data[i], y_data[i])
-    return x_data, y_data
+    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_train[start_index:end_index])), dtype='float32')
+    y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+    return x_data.astype(np.float32), y_data
 
 def load_validation(directory, start_index, end_index):
     import numpy as np
@@ -351,7 +355,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
                 err_train = 0
                 while count_train < TRAIN_DATA_SIZE:
                     nextcount = min(count_train + BATCH_SIZE, TRAIN_DATA_SIZE)
-                    x_train, y_train = load_train(res_dir, count_train, nextcount)
+                    x_train, y_train = load_train(res_dir, count_train, nextcount, pre_pro=False)
                     err_train += sess.run(tf.cast(D, tf.float32)*err_d/TRAIN_DATA_SIZE, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
