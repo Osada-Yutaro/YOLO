@@ -230,7 +230,7 @@ def load_train(directory, start_index, end_index, pre_pro=True):
 
     x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_train[start_index:end_index])), dtype='float32')
     y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
-    return x_data.astype(np.float32), y_data
+    return x_data, y_data
 
 def load_validation(directory, start_index, end_index):
     import numpy as np
@@ -322,9 +322,9 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
     ckpt = tf.train.get_checkpoint_state(model_dir)
     y_pred = model(x, keep_prob)
 
-    err_d = loss_d(y, y_pred, D)/tf.cast(D, tf.float32)
-    err_w = DECAY*loss_w()
-    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d + err_w)
+    err_d = loss_d(y, y_pred, D)/BATCH_SIZE
+    err_w = loss_w()*tf.cast(D, tf.float32)/BATCH_SIZE
+    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d)
 
     saver = tf.train.Saver()
 
@@ -339,14 +339,14 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
-        print('epoch, training error, validation error, weight error')
+        print('#epoch, training error, validation error')
         for epoch in range(start_epoch, start_epoch + epoch_size):
             random.shuffle(parsed_xml_list_train)
 
             count_train = 0
             while count_train < TRAIN_DATA_SIZE:
                 nextcount = min(count_train + BATCH_SIZE, TRAIN_DATA_SIZE)
-                x_train, y_train = load_train(res_dir, count_train, nextcount)
+                x_train, y_train = load_train(res_dir, count_train, nextcount, True)
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
                 count_train = nextcount
 
@@ -356,7 +356,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
                 while count_train < TRAIN_DATA_SIZE:
                     nextcount = min(count_train + BATCH_SIZE, TRAIN_DATA_SIZE)
                     x_train, y_train = load_train(res_dir, count_train, nextcount, pre_pro=False)
-                    err_train += sess.run(tf.cast(D, tf.float32)*err_d/TRAIN_DATA_SIZE, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
+                    err_train += sess.run(err_d*BATCH_SIZE/TRAIN_DATA_SIZE, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: 1.})
                     count_train = nextcount
 
                 count_validation = 0
@@ -364,8 +364,8 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
                 while count_validation < VALIDATION_DATA_SIZE:
                     nextcount = min(count_validation + BATCH_SIZE, VALIDATION_DATA_SIZE)
                     x_validation, y_validation = load_validation(res_dir, count_validation, nextcount)
-                    err_validation += sess.run(tf.cast(D, tf.float32)*err_d/VALIDATION_DATA_SIZE, feed_dict={x: x_validation, y: y_validation, D: nextcount - count_validation, keep_prob: 1.})
+                    err_validation += sess.run(err_d*BATCH_SIZE/VALIDATION_DATA_SIZE, feed_dict={x: x_validation, y: y_validation, D: nextcount - count_validation, keep_prob: 1.})
                     count_validation = nextcount
 
-                print(epoch, err_train, err_validation, sess.run(err_w))
+                print(epoch, err_train, err_validation)
         saver.save(sess, model_dir + 'weights.ckpt')
