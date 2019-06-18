@@ -88,43 +88,17 @@ DECAY = 0.0005
 TRAIN_DATA_SIZE = 0
 VALIDATION_DATA_SIZE = 0
 
-parsed_xml_list_train = None
-parsed_xml_list_validation = None
+TRAIN_LIST = None
+VALIDATION_LIST = None
 
-def convert_X(directory, parsed_xml):
+def convert_X(directory, filename):
     import numpy as np
     import cv2
-    return cv2.resize(cv2.imread(directory + 'JPEGImages/' + parsed_xml.find('filename').text), dsize=(448, 448))
+    return cv2.resize(cv2.imread(directory + 'JPEGImages/' + filename + '.jpg'), dsize=(448, 448))
 
-def convert_Y(parsed_xml):
+def convert_Y(directory, filename):
     import numpy as np
-    width = float(parsed_xml.find('size/width').text)
-    height = float(parsed_xml.find('size/height').text)
-    y_data = np.zeros((S, S, 5*B + C), dtype='float32')
-    for sx in range(S):
-        for sy in range(S):
-            b = 0
-            for obj in parsed_xml.findall('object'):
-                if b == B:
-                    break
-
-                xmin = float(obj.find('bndbox/xmin').text)
-                ymin = float(obj.find('bndbox/ymin').text)
-                xmax = float(obj.find('bndbox/xmax').text)
-                ymax = float(obj.find('bndbox/ymax').text)
-                xmid = (xmin + xmax)/2
-                ymid = (ymin + ymax)/2
-
-                if sx*width/S <= xmid < (sx + 1)*width/S and sy*height/S <= ymid < (sy + 1)*height/S:
-                    y_data[sx, sy, C + 5*b] = S*xmid/width - sx
-                    y_data[sx, sy, C + 5*b + 1] = S*ymid/height - sy
-                    y_data[sx, sy, C + 5*b + 2] = (xmax - xmin)/width
-                    y_data[sx, sy, C + 5*b + 3] = (ymax - ymin)/height
-                    y_data[sx, sy, C + 5*b + 4] = 1.
-
-                    y_data[sx, sy, INDICES[obj.find('name').text]] = 1.
-                    b += 1
-    return y_data
+    return np.load(directory + 'Segmentations/' + filename + '.npy')
 
 def random_adjust(img):
     import random
@@ -204,42 +178,51 @@ def load_dataset(directory):
     import xml.etree.ElementTree as ET
     import glob
 
-    global parsed_xml_list_train
-    global parsed_xml_list_validation
+    global TRAIN_LIST
+    global VALIDATION_LIST
     global TRAIN_DATA_SIZE
     global VALIDATION_DATA_SIZE
     if directory[-1] != '/':
         directory = directory + '/'
-    parsed_xml_list_train = list(map(ET.parse, glob.glob(directory + 'Annotations/Train/*')))
-    parsed_xml_list_validation = list(map(ET.parse, glob.glob(directory + 'Annotations/Validation/*')))
-    TRAIN_DATA_SIZE = len(parsed_xml_list_train)
-    VALIDATION_DATA_SIZE = len(parsed_xml_list_validation)
+
+    f_tr = open(directory + 'train.txt', 'r')
+    f_vl = open(directory + 'validation.txt', 'r')
+    TRAIN_LIST = f_tr.read().split('\n')[0:-1]
+    VALIDATION_LIST = f_vl.read().split('\n')[0:-1]
+    TRAIN_DATA_SIZE = len(TRAIN_LIST)
+    VALIDATION_DATA_SIZE = len(VALIDATION_LIST)
+    f_tr.close()
+    f_vl.close()
 
 def load_train(directory, start_index, end_index, pre_pro=True):
     import numpy as np
-    global parsed_xml_list_train
-    if parsed_xml_list_train is None:
+    global VALIDATION_LIST
+    if directory[-1] != '/':
+        directory = directory + '/'
+    if TRAIN_LIST is None:
         load_dataset(directory)
     if pre_pro:
-        x_data = np.array(list(map(lambda xml: random_adjust(convert_X(directory, xml)), parsed_xml_list_train[start_index:end_index])))
-        y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+        x_data = np.array(list(map(lambda fn: random_adjust(convert_X(directory, fn)), TRAIN_LIST[start_index:end_index])))
+        y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), TRAIN_LIST[start_index:end_index])))
         for i in range(end_index - start_index):
             x_data[i], y_data[i] = random_shift(x_data[i], y_data[i])
             x_data[i], y_data[i] = random_reverse(x_data[i], y_data[i])
         return x_data.astype(np.float32), y_data
 
-    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_train[start_index:end_index])), dtype='float32')
-    y_data = np.array(list(map(convert_Y, parsed_xml_list_train[start_index:end_index])))
+    x_data = np.array(list(map(lambda fn: convert_X(directory, fn), TRAIN_LIST[start_index:end_index])), dtype='float32')
+    y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), TRAIN_LIST[start_index:end_index])))
     return x_data, y_data
 
 def load_validation(directory, start_index, end_index):
     import numpy as np
-    global parsed_xml_list_validation
-    if parsed_xml_list_validation is None:
+    global VALIDATION_LIST
+    if directory[-1] != '/':
+        directory = directory + '/'
+    if VALIDATION_LIST is None:
         load_dataset(directory)
-    x_data = np.array(list(map(lambda xml: convert_X(directory, xml), parsed_xml_list_validation[start_index:end_index])))
-    y_data = np.array(list(map(convert_Y, parsed_xml_list_validation[start_index:end_index])))
-    return x_data.astype(np.float32), y_data
+    x_data = np.array(list(map(lambda fn: convert_X(directory, fn), VALIDATION_LIST[start_index:end_index]))).astype(np.float32)
+    y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), VALIDATION_LIST[start_index:end_index])))
+    return x_data, y_data
 
 def loss_w():
     import tensorflow as tf
@@ -341,7 +324,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
             sess.run(init)
         print('#epoch, training error, validation error')
         for epoch in range(start_epoch, start_epoch + epoch_size):
-            random.shuffle(parsed_xml_list_train)
+            random.shuffle(TRAIN_LIST)
 
             count_train = 0
             while count_train < TRAIN_DATA_SIZE:
