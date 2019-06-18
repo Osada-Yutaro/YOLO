@@ -65,13 +65,10 @@ def threshold_processing(image, pred):
     return img_cp
 
 def main(imagefile):
-    #image = cv2.resize(cv2.imread(imagefile).astype(np.float32), dsize=(448, 448))
-    #pred = model(np.reshape(image, [1, 448, 448, 3]))
-    image, pred = yolo.load_validation('VOCdevkit/VOC2007/', 0, 1)
-    po, nya = yolo.random_reverse(image[0], pred[0])
-    res = threshold_processing(po, nya)
-    #res = threshold_processing(image[0], pred[0])
-    cv2.imwrite('predict2.png', res)
+    image = cv2.resize(cv2.imread(imagefile).astype(np.float32), dsize=(448, 448))
+    pred = model(np.reshape(image, [1, 448, 448, 3]))[0]
+    res = threshold_processing(image, pred)
+    cv2.imwrite('predict.png', res)
 
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
