@@ -81,6 +81,18 @@ def model(x, keep_prob=1.):
 
     return __eighth_block(__seventh_block(__sixth_block(__fifth_block(__fourth_block(__third_block(__second_block(__first_block(x)))))), keep_prob))
 
+def execute(x, mdl_dr):
+    import tensorflow as tf
+    if mdl_dr[-1] != '/':
+        mdl_dr = mdl_dr + '/'
+    y = model(x)
+    res = None
+    saver = tf.train.Saver()
+    with tf.Session() as sess:
+        saver.restore(sess, mdl_dr + 'weights.ckpt')
+        res = sess.run(y)
+    return res
+
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 16
@@ -94,21 +106,11 @@ VALIDATION_LIST = None
 def convert_X(directory, filename):
     import numpy as np
     import cv2
-    return cv2.resize(cv2.imread(directory + 'JPEGImages/' + filename + '.jpg'), dsize=(448, 448))
+    return cv2.resize(cv2.imread(directory + 'JPEGImages/' + filename + '.jpg'), dsize=(448, 448)).astype('float32')
 
 def convert_Y(directory, filename):
     import numpy as np
     return np.load(directory + 'Segmentations/' + filename + '.npy')
-
-def random_adjust(img):
-    import random
-    import numpy as np
-    import cv2
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
-    hsv[:, :, 1] *= random.random() + 0.5
-    hsv[:, :, 2] *= random.random() + 0.5
-    hsv = np.minimum(hsv, 255.).astype(np.uint8)
-    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
 
 def random_shift(inp, oup):
     import random
@@ -202,15 +204,11 @@ def load_train(directory, start_index, end_index, pre_pro=True):
     if TRAIN_LIST is None:
         load_dataset(directory)
     if pre_pro:
-        x_data = np.array(list(map(lambda fn: random_adjust(convert_X(directory, fn)), TRAIN_LIST[start_index:end_index])))
+        x_data = np.array(list(map(lambda fn: convert_X(directory, fn), TRAIN_LIST[start_index:end_index])))
         y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), TRAIN_LIST[start_index:end_index])))
         for i in range(end_index - start_index):
             x_data[i], y_data[i] = random_shift(x_data[i], y_data[i])
             x_data[i], y_data[i] = random_reverse(x_data[i], y_data[i])
-        return x_data.astype(np.float32), y_data
-
-    x_data = np.array(list(map(lambda fn: convert_X(directory, fn), TRAIN_LIST[start_index:end_index])), dtype='float32')
-    y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), TRAIN_LIST[start_index:end_index])))
     return x_data, y_data
 
 def load_validation(directory, start_index, end_index):
@@ -220,7 +218,7 @@ def load_validation(directory, start_index, end_index):
         directory = directory + '/'
     if VALIDATION_LIST is None:
         load_dataset(directory)
-    x_data = np.array(list(map(lambda fn: convert_X(directory, fn), VALIDATION_LIST[start_index:end_index]))).astype(np.float32)
+    x_data = np.array(list(map(lambda fn: convert_X(directory, fn), VALIDATION_LIST[start_index:end_index])))
     y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), VALIDATION_LIST[start_index:end_index])))
     return x_data, y_data
 
@@ -263,7 +261,7 @@ def size_loss(trgt, pred, D):
     w_pred = tf.nn.relu(pred[:, :, :, C + 2:C + 5*B:5])
     h_pred = tf.nn.relu(pred[:, :, :, C + 3:C + 5*B:5])
 
-    eps = 1e-8*tf.ones([D, S, S, B])
+    eps = 1e-4
     w_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(w_trgt + eps) - tf.sqrt(w_pred + eps))*confi_trgt)
     h_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt)
     return w_loss + h_loss
@@ -275,7 +273,7 @@ def confidence_loss(trgt, pred, D):
     confi_pred = pred[:, :, :, C + 4:C + 5*B:5]
 
     confi_loss_obj = tf.reduce_sum(tf.square(confi_trgt - confi_pred)*confi_trgt)
-    confi_loss_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_trgt - confi_pred)*(tf.ones([D, S, S, B]) - confi_trgt))
+    confi_loss_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_trgt - confi_pred)*(1 - confi_trgt))
 
     return confi_loss_obj + confi_loss_noobj
 
@@ -333,7 +331,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
                 count_train = nextcount
 
-            if epoch%5 == 0:
+            if epoch%10 == 0:
                 count_train = 0
                 err_train = 0
                 while count_train < TRAIN_DATA_SIZE:
