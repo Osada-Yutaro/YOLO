@@ -239,7 +239,7 @@ def loss_w():
         err += tf.reduce_sum(tf.square(tf.get_variable('w_8')))
         return err
 
-def position_loss(trgt, pred, D):
+def position_loss(trgt, pred):
     import tensorflow as tf
     x_trgt = trgt[:, :, :, C:C + 5*B:5]
     y_trgt = trgt[:, :, :, C + 1:C + 5*B:5]
@@ -252,7 +252,7 @@ def position_loss(trgt, pred, D):
     y_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(y_trgt - y_pred)*confi_trgt)
     return x_loss + y_loss
 
-def size_loss(trgt, pred, D):
+def size_loss(trgt, pred):
     import tensorflow as tf
     w_trgt = trgt[:, :, :, C + 2:C + 5*B:5]
     h_trgt = trgt[:, :, :, C + 3:C + 5*B:5]
@@ -266,7 +266,7 @@ def size_loss(trgt, pred, D):
     h_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt)
     return w_loss + h_loss
 
-def confidence_loss(trgt, pred, D):
+def confidence_loss(trgt, pred):
     import tensorflow as tf
     confi_trgt = trgt[:, :, :, C + 4:C + 5*B:5]
 
@@ -277,15 +277,15 @@ def confidence_loss(trgt, pred, D):
 
     return confi_loss_obj + confi_loss_noobj
 
-def class_loss(trgt, pred, D):
+def class_loss(trgt, pred):
     import tensorflow as tf
     p_trgt = trgt[:, :, :, 0:C]
     p_pred = pred[:, :, :, 0:C]
-    pred_loss = tf.reduce_sum(tf.square(p_trgt - p_pred)*tf.reshape(tf.reduce_max(p_trgt, axis=[3]), [D, S, S, 1]))
+    pred_loss = tf.reduce_sum(tf.square(p_trgt - p_pred)*tf.reduce_max(p_trgt, axis=[3]))
     return pred_loss
 
-def loss_d(trgt, pred, D):
-    return position_loss(trgt, pred, D) + size_loss(trgt, pred, D) + confidence_loss(trgt, pred, D) + class_loss(trgt, pred, D)
+def loss_d(trgt, pred):
+    return position_loss(trgt, pred) + size_loss(trgt, pred) + confidence_loss(trgt, pred) + class_loss(trgt, pred)
 
 def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
     import random
@@ -303,8 +303,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
     ckpt = tf.train.get_checkpoint_state(model_dir)
     y_pred = model(x, keep_prob)
 
-    err_d = loss_d(y, y_pred, D)/BATCH_SIZE
-    err_w = loss_w()*tf.cast(D, tf.float32)/BATCH_SIZE
+    err_d = loss_d(y, y_pred)/BATCH_SIZE
     minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d)
 
     saver = tf.train.Saver()
