@@ -172,8 +172,7 @@ def random_reverse(inp, oup):
     import cv2
     if random.randint(0, 255)%2 == 0:
         eye = np.eye(30, dtype='float32')[C] + np.eye(30, dtype='float32')[C + 5]
-        ones = np.ones(30, dtype='float32')
-        return cv2.flip(inp, 1), np.apply_along_axis(lambda x: (ones - eye)*x - eye*x + eye, 2, np.flip(oup, 0))
+        return cv2.flip(inp, 1), np.apply_along_axis(lambda x: (1 - eye)*x - eye*x + eye, 2, np.flip(oup, 0))
     return inp, oup
 
 def load_dataset(directory):
@@ -203,9 +202,9 @@ def load_train(directory, start_index, end_index, pre_pro=True):
         directory = directory + '/'
     if TRAIN_LIST is None:
         load_dataset(directory)
+    x_data = np.array(list(map(lambda fn: convert_X(directory, fn), TRAIN_LIST[start_index:end_index])))
+    y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), TRAIN_LIST[start_index:end_index])))
     if pre_pro:
-        x_data = np.array(list(map(lambda fn: convert_X(directory, fn), TRAIN_LIST[start_index:end_index])))
-        y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), TRAIN_LIST[start_index:end_index])))
         for i in range(end_index - start_index):
             x_data[i], y_data[i] = random_shift(x_data[i], y_data[i])
             x_data[i], y_data[i] = random_reverse(x_data[i], y_data[i])
@@ -239,7 +238,7 @@ def loss_w():
         err += tf.reduce_sum(tf.square(tf.get_variable('w_8')))
         return err
 
-def position_loss(trgt, pred):
+def position_loss(trgt, pred, D):
     import tensorflow as tf
     x_trgt = trgt[:, :, :, C:C + 5*B:5]
     y_trgt = trgt[:, :, :, C + 1:C + 5*B:5]
@@ -252,7 +251,7 @@ def position_loss(trgt, pred):
     y_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(y_trgt - y_pred)*confi_trgt)
     return x_loss + y_loss
 
-def size_loss(trgt, pred):
+def size_loss(trgt, pred, D):
     import tensorflow as tf
     w_trgt = trgt[:, :, :, C + 2:C + 5*B:5]
     h_trgt = trgt[:, :, :, C + 3:C + 5*B:5]
@@ -266,7 +265,7 @@ def size_loss(trgt, pred):
     h_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt)
     return w_loss + h_loss
 
-def confidence_loss(trgt, pred):
+def confidence_loss(trgt, pred, D):
     import tensorflow as tf
     confi_trgt = trgt[:, :, :, C + 4:C + 5*B:5]
 
@@ -277,15 +276,15 @@ def confidence_loss(trgt, pred):
 
     return confi_loss_obj + confi_loss_noobj
 
-def class_loss(trgt, pred):
+def class_loss(trgt, pred, D):
     import tensorflow as tf
     p_trgt = trgt[:, :, :, 0:C]
     p_pred = pred[:, :, :, 0:C]
-    pred_loss = tf.reduce_sum(tf.square(p_trgt - p_pred)*tf.reduce_max(p_trgt, axis=[3]))
+    pred_loss = tf.reduce_sum(tf.square(p_trgt - p_pred)*tf.reshape(tf.reduce_max(p_trgt, axis=[3]), [D, S, S, 1]))
     return pred_loss
 
-def loss_d(trgt, pred):
-    return position_loss(trgt, pred) + size_loss(trgt, pred) + confidence_loss(trgt, pred) + class_loss(trgt, pred)
+def loss_d(trgt, pred, D):
+    return position_loss(trgt, pred, D) + size_loss(trgt, pred, D) + confidence_loss(trgt, pred, D) + class_loss(trgt, pred, D)
 
 def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
     import random
@@ -303,7 +302,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
     ckpt = tf.train.get_checkpoint_state(model_dir)
     y_pred = model(x, keep_prob)
 
-    err_d = loss_d(y, y_pred)/BATCH_SIZE
+    err_d = loss_d(y, y_pred, D)/BATCH_SIZE
     minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d)
 
     saver = tf.train.Saver()
