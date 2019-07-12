@@ -260,7 +260,7 @@ def size_loss(trgt, pred, D):
     w_pred = tf.nn.relu(pred[:, :, :, C + 2:C + 5*B:5])
     h_pred = tf.nn.relu(pred[:, :, :, C + 3:C + 5*B:5])
 
-    eps = 1e-4
+    eps = 1e-1
     w_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(w_trgt + eps) - tf.sqrt(w_pred + eps))*confi_trgt)
     h_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt)
     return w_loss + h_loss
@@ -314,11 +314,11 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-4, start_epoch=1):
 
     ckpt = tf.train.get_checkpoint_state(model_dir)
     with tf.Session() as sess:
-        random.seed()
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
             sess.run(init)
+        random.seed()
         print('#epoch, training error, validation error')
         for epoch in range(start_epoch, start_epoch + epoch_size):
             random.shuffle(TRAIN_LIST)
@@ -330,7 +330,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-4, start_epoch=1):
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
                 count_train = nextcount
 
-            if epoch%10 == 0:
+            if epoch%5 == 0:
                 count_train = 0
                 err_train = 0
                 while count_train < TRAIN_DATA_SIZE:
