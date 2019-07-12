@@ -286,7 +286,7 @@ def class_loss(trgt, pred, D):
 def loss_d(trgt, pred, D):
     return position_loss(trgt, pred, D) + size_loss(trgt, pred, D) + confidence_loss(trgt, pred, D) + class_loss(trgt, pred, D)
 
-def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
+def train(res_dir, model_dir, epoch_size=100, lr=1e-4, start_epoch=1):
     import random
     import tensorflow as tf
 
@@ -314,6 +314,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-3, start_epoch=1):
 
     ckpt = tf.train.get_checkpoint_state(model_dir)
     with tf.Session() as sess:
+        random.seed()
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, model_dir + 'weights.ckpt')
         else:
