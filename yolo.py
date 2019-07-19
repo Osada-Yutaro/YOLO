@@ -364,7 +364,6 @@ def save_graph(model_dir):
     sess = tf.InteractiveSession()
     with tf.Session() as sess:
         saver.restore(sess, model_dir + 'weights.ckpt')
-        sess.graph._unsafe_unfinalize()
         builder = tf.saved_model.builder.SavedModelBuilder('savedmodel/')
         def_map = {'input': _build_signature({'input': tf.saved_model.utils.build_tensor_info(x)}, {'result': tf.saved_model.utils.build_tensor_info(y)})}
         builder.add_meta_graph_and_variables(sess, [tf.saved_model.tag_constants.SERVING], signature_def_map=def_map)
