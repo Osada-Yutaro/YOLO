@@ -349,22 +349,3 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-4, start_epoch=1):
 
                 print(epoch, err_train, err_validation)
         saver.save(sess, model_dir + 'weights.ckpt')
-
-def save_graph(model_dir):
-    def _build_signature(sig_inputs, sig_outputs):
-        return tf.saved_model.signature_def_utils.build_signature_def(sig_inputs, sig_outputs, tf.saved_model.signature_constants.REGRESS_METHOD_NAME)
-    import numpy as np
-    import tensorflow as tf
-    if model_dir[-1] != '/':
-        model_dir = model_dir + '/'
-
-    x = tf.placeholder(tf.float32, [None, 448, 448, 3], 'input')
-    y = model(x, 1.)
-    saver = tf.train.Saver()
-    sess = tf.InteractiveSession()
-    with tf.Session() as sess:
-        saver.restore(sess, model_dir + 'weights.ckpt')
-        builder = tf.saved_model.builder.SavedModelBuilder('savedmodel/')
-        def_map = {'input': _build_signature({'input': tf.saved_model.utils.build_tensor_info(x)}, {'result': tf.saved_model.utils.build_tensor_info(y)})}
-        builder.add_meta_graph_and_variables(sess, [tf.saved_model.tag_constants.SERVING], signature_def_map=def_map)
-        builder.save()
