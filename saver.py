@@ -1,4 +1,4 @@
-def save_graph(checkpoint_dir, saved_model_dir):
+def save_model(checkpoint_dir, saved_model_dir):
     import os
     import tensorflow as tf
     import yolo

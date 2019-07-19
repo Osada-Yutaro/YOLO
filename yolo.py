@@ -81,18 +81,6 @@ def model(x, keep_prob=1.):
 
     return __eighth_block(__seventh_block(__sixth_block(__fifth_block(__fourth_block(__third_block(__second_block(__first_block(x)))))), keep_prob))
 
-def execute(x, mdl_dr):
-    import tensorflow as tf
-    if mdl_dr[-1] != '/':
-        mdl_dr = mdl_dr + '/'
-    y = model(x)
-    res = None
-    saver = tf.train.Saver()
-    with tf.Session() as sess:
-        saver.restore(sess, mdl_dr + 'weights.ckpt')
-        res = sess.run(y)
-    return res
-
 LAMBDA_COORD = 5.0
 LAMBDA_NOOBJ = 0.5
 BATCH_SIZE = 16
@@ -103,14 +91,16 @@ VALIDATION_DATA_SIZE = 0
 TRAIN_LIST = None
 VALIDATION_LIST = None
 
-def convert_X(directory, filename):
+def convert_X(data_dir, filename):
+    import os
     import numpy as np
     import cv2
-    return cv2.resize(cv2.imread(directory + 'JPEGImages/' + filename + '.jpg'), dsize=(448, 448)).astype('float32')
+    return cv2.resize(cv2.imread(os.path.join(data_dir, 'JPEGImages', filename + '.jpg')), dsize=(448, 448)).astype('float32')
 
-def convert_Y(directory, filename):
+def convert_Y(data_dir, filename):
+    import os
     import numpy as np
-    return np.load(directory + 'Segmentations/' + filename + '.npy')
+    return np.load(os.path.join(data_dir, 'Segmentation', filename) + '.npy')
 
 def random_shift(inp, oup):
     import random
@@ -175,7 +165,8 @@ def random_reverse(inp, oup):
         return cv2.flip(inp, 1), np.apply_along_axis(lambda x: (1 - eye)*x - eye*x + eye, 2, np.flip(oup, 0))
     return inp, oup
 
-def load_dataset(directory):
+def load_dataset(data_dir):
+    import os
     import xml.etree.ElementTree as ET
     import glob
 
@@ -183,11 +174,9 @@ def load_dataset(directory):
     global VALIDATION_LIST
     global TRAIN_DATA_SIZE
     global VALIDATION_DATA_SIZE
-    if directory[-1] != '/':
-        directory = directory + '/'
 
-    f_tr = open(directory + 'train.txt', 'r')
-    f_vl = open(directory + 'validation.txt', 'r')
+    f_tr = open(os.path.join(data_dir, 'train.txt'), 'r')
+    f_vl = open(os.path.join(data_dir, 'validation.txt'), 'r')
     TRAIN_LIST = f_tr.read().split('\n')[0:-1]
     VALIDATION_LIST = f_vl.read().split('\n')[0:-1]
     TRAIN_DATA_SIZE = len(TRAIN_LIST)
@@ -195,30 +184,26 @@ def load_dataset(directory):
     f_tr.close()
     f_vl.close()
 
-def load_train(directory, start_index, end_index, pre_pro=True):
+def load_train(data_dir, start_index, end_index, pre_pro=True):
     import numpy as np
     global VALIDATION_LIST
-    if directory[-1] != '/':
-        directory = directory + '/'
     if TRAIN_LIST is None:
-        load_dataset(directory)
-    x_data = np.array(list(map(lambda fn: convert_X(directory, fn), TRAIN_LIST[start_index:end_index])))
-    y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), TRAIN_LIST[start_index:end_index])))
+        load_dataset(data_dir)
+    x_data = np.array(list(map(lambda fn: convert_X(data_dir, fn), TRAIN_LIST[start_index:end_index])))
+    y_data = np.array(list(map(lambda fn: convert_Y(data_dir, fn), TRAIN_LIST[start_index:end_index])))
     if pre_pro:
         for i in range(end_index - start_index):
             x_data[i], y_data[i] = random_shift(x_data[i], y_data[i])
             x_data[i], y_data[i] = random_reverse(x_data[i], y_data[i])
     return x_data, y_data
 
-def load_validation(directory, start_index, end_index):
+def load_validation(data_dir, start_index, end_index):
     import numpy as np
     global VALIDATION_LIST
-    if directory[-1] != '/':
-        directory = directory + '/'
     if VALIDATION_LIST is None:
-        load_dataset(directory)
-    x_data = np.array(list(map(lambda fn: convert_X(directory, fn), VALIDATION_LIST[start_index:end_index])))
-    y_data = np.array(list(map(lambda fn: convert_Y(directory, fn), VALIDATION_LIST[start_index:end_index])))
+        load_dataset(data_dir)
+    x_data = np.array(list(map(lambda fn: convert_X(data_dir, fn), VALIDATION_LIST[start_index:end_index])))
+    y_data = np.array(list(map(lambda fn: convert_Y(data_dir, fn), VALIDATION_LIST[start_index:end_index])))
     return x_data, y_data
 
 def loss_w():
@@ -286,12 +271,10 @@ def class_loss(trgt, pred, D):
 def loss_d(trgt, pred, D):
     return position_loss(trgt, pred, D) + size_loss(trgt, pred, D) + confidence_loss(trgt, pred, D) + class_loss(trgt, pred, D)
 
-def train(res_dir, model_dir, epoch_size=100, lr=1e-4, start_epoch=1):
+def train(res_dir, checkpoint_dir, epoch_size=100, lr=1e-4, start_epoch=1):
+    import os
     import random
     import tensorflow as tf
-
-    if model_dir[-1] != '/':
-        model_dir = model_dir + '/'
 
     x = tf.placeholder(tf.float32, [None, 448, 448, 3])
     y = tf.placeholder(tf.float32, [None, S, S, 5*B + C])
@@ -299,7 +282,7 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-4, start_epoch=1):
     keep_prob = tf.placeholder(tf.float32)
     learning_rate = tf.placeholder(tf.float32)
 
-    ckpt = tf.train.get_checkpoint_state(model_dir)
+    ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
     y_pred = model(x, keep_prob)
 
     err_d = loss_d(y, y_pred, D)/BATCH_SIZE
@@ -312,10 +295,10 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-4, start_epoch=1):
 
     load_dataset(res_dir)
 
-    ckpt = tf.train.get_checkpoint_state(model_dir)
+    ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
     with tf.Session() as sess:
         if ckpt and ckpt.model_checkpoint_path:
-            saver.restore(sess, model_dir + 'weights.ckpt')
+            saver.restore(sess, os.path.join(checkpoint_dir, 'weights.ckpt'))
         else:
             sess.run(init)
         random.seed()
@@ -348,4 +331,4 @@ def train(res_dir, model_dir, epoch_size=100, lr=1e-4, start_epoch=1):
                     count_validation = nextcount
 
                 print(epoch, err_train, err_validation)
-        saver.save(sess, model_dir + 'weights.ckpt')
+        saver.save(sess, os.path.join(checkpoint_dir, 'weights.ckpt'))
