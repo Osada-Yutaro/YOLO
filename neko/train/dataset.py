@@ -28,3 +28,7 @@ class Data:
         x_data = np.array(list(map(lambda fn: pp.convert_X(self.DATA_DIR, fn), self.VALIDATION_LIST[start_index:end_index])))
         y_data = np.array(list(map(lambda fn: pp.convert_Y(self.DATA_DIR, fn), self.VALIDATION_LIST[start_index:end_index])))
         return x_data, y_data
+
+    def shuffle(self):
+        import random as rnd
+        rnd.shuffle(self.TRAIN_LIST)
