@@ -75,4 +75,4 @@ def convert_X(data_dir, filename):
 def convert_Y(data_dir, filename):
     import os
     import numpy as np
-    return np.load(os.path.join(data_dir, 'Segmentation', filename) + '.npy')
+    return np.load(os.path.join(data_dir, 'Segmentations', filename) + '.npy')

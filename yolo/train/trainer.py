@@ -27,7 +27,6 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
 
     saver = tf.train.Saver()
 
-    sess = tf.InteractiveSession()
     init = tf.global_variables_initializer()
 
     data = dataset.Data(data_dir)
@@ -51,7 +50,7 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, D: nextcount - count_train, keep_prob: .5, learning_rate: lr})
                 count_train = nextcount
 
-            if epoch%5 == 0:
+            if epoch%10 == 0:
                 count_train = 0
                 err_train = 0
                 while count_train < data.TRAIN_DATA_SIZE:

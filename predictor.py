@@ -14,18 +14,6 @@ REVERSE_RESOLUTION = yolo.REVERSE_RESOLUTION
 
 threshold = 0.5
 
-def model(x):
-    model_dir = sys.argv[2]
-
-    y = yolo.model(x)
-
-    saver = tf.train.Saver()
-    sess = tf.InteractiveSession()
-
-    with tf.Session() as sess:
-        saver.restore(sess, model_dir + 'weights.ckpt')
-        return sess.run(y)
-
 def bounding_box(img, bb, cl, color):
     img_cp = np.copy(img)
 
@@ -66,9 +54,12 @@ def threshold_processing(image, pred):
 
 def main(imagefile):
     image = cv2.resize(cv2.imread(imagefile).astype(np.float32), dsize=(448, 448))
-    pred = model(np.reshape(image, [1, 448, 448, 3]))[0]
-    res = threshold_processing(image, pred)
-    cv2.imwrite('predict.png', res)
+    with tf.Session() as sess:
+        graph_def = tf.saved_model.load(sess, [tf.saved_model.tag_constants.SERVING], sys.argv[2])
+        model = graph_def.signature_def['serving_default']
+        pred = sess.run(model.outputs['result'].name, feed_dict={model.inputs['input'].name: np.array([image])})
+        res = threshold_processing(image, pred)
+        cv2.imwrite('predict.png', res)
 
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
