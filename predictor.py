@@ -1,3 +1,4 @@
+import os
 import glob
 import sys
 import random
@@ -7,10 +8,10 @@ import numpy as np
 import cv2
 import yolo
 
-S = yolo.S
-B = yolo.B
-C = yolo.C
-REVERSE_RESOLUTION = yolo.REVERSE_RESOLUTION
+S = yolo.architecture.constants.S
+B = yolo.architecture.constants.B
+C = yolo.architecture.constants.C
+REVERSE_RESOLUTION = yolo.architecture.constants.REVERSE_RESOLUTION
 
 threshold = 0.5
 
@@ -49,19 +50,19 @@ def threshold_processing(image, pred):
 
                 if threshold < confi*pc:
                     img_cp = bounding_box(img_cp, (x, y, w, h), cl, (0, 255, 0))
-                    print('onject:', x, y, w, h, confi, pc, cl)
+                    #print('onject:', x, y, w, h, confi, pc, cl, confi*pc)
     return img_cp
 
-def main(imagefile):
-    image = cv2.resize(cv2.imread(imagefile).astype(np.float32), dsize=(448, 448))
+def main():
     with tf.Session() as sess:
-        graph_def = tf.saved_model.load(sess, [tf.saved_model.tag_constants.SERVING], sys.argv[2])
+        graph_def = tf.saved_model.load(sess, [tf.saved_model.tag_constants.SERVING], 'model/SavedModel')
         model = graph_def.signature_def['serving_default']
-        pred = sess.run(model.outputs['result'].name, feed_dict={model.inputs['input'].name: np.array([image])})
-        res = threshold_processing(image, pred)
-        cv2.imwrite('predict.png', res)
+        for i in range(16):
+            image, _ = yolo.train.dataset.Data('VOCdevkit/VOC2007+2012/').load_validation(i*16, (i + 1)*16)
+            pred = sess.run(model.outputs['result'].name, feed_dict={model.inputs['input'].name: image})
+            for j in range(16):
+                res = threshold_processing(image[j], pred[j])
+                cv2.imwrite('valid_images/predict' + str(i) + '_' + str(j) + '.png', res)
 
-
-np.set_printoptions(linewidth=np.inf, threshold=np.inf)
-args = sys.argv
-main(args[1])
+if __name__ == 'main':
+    main()
