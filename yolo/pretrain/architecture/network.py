@@ -1,6 +1,7 @@
-def graph_def(x, keep_prob=1.):
+
+def graph_def(x):
     import tensorflow as tf
-    from . import layer_functions as lf
+    from ...architecture import layer_functions as lf
     def __first_block(x):
         return lf.max_pool(lf.leaky_relu(lf.conv2d(x, [7, 7, 3, 192], 2, name='w_1')), 2, 2)
     def __second_block(x):
@@ -31,20 +32,10 @@ def graph_def(x, keep_prob=1.):
         layer_1 = lf.leaky_relu(lf.conv2d(layer_0, [1, 1, 512, 1024], name='w_5_1'))
         layer_2 = lf.leaky_relu(lf.conv2d(layer_1, [3, 3, 1024, 512], name='w_5_2'))
         layer_3 = lf.leaky_relu(lf.conv2d(layer_2, [1, 1, 512, 1024], name='w_5_3'))
-        layer_4 = lf.leaky_relu(lf.conv2d(layer_3, [3, 3, 1024, 1024], name='w_5_4'))
-        layer_5 = lf.leaky_relu(lf.conv2d(layer_4, [3, 3, 1024, 1024], name='w_5_5'))
-        return lf.leaky_relu(lf.conv2d(layer_5, [3, 3, 1024, 1024], 2, name='w_5_6'))
+        return lf.leaky_relu(lf.conv2d(layer_3, [3, 3, 1024, 1024], name='w_5_4'))
     def __sixth_block(x):
         layer_0 = __fifth_block(x)
-        layer_1 = lf.leaky_relu(lf.conv2d(layer_0, [3, 3, 1024, 1024], name='w_6_1'))
-        return lf.leaky_relu(lf.conv2d(layer_1, [3, 3, 1024, 1024], name='w_6_2'))
-    def __seventh_block(x):
-        layer_0 = __sixth_block(x)
-        w = lf.weight_variable([7*7*1024, 4096], name='w_7')
-        conn = lf.leaky_relu(tf.matmul(tf.reshape(layer_0, [-1, 7*7*1024]), w))
-        return tf.nn.dropout(conn, rate=1-keep_prob)
-    def __eighth_block(x):
-        layer_0 = __seventh_block(x)
-        w = lf.weight_variable([4096, 7*7*30], name='w_8')
-        return tf.nn.relu(tf.reshape(tf.matmul(layer_0, w), [-1, 7, 7, 30]), 'result')
-    return __eighth_block(x)
+        layer_1 = lf.avg_pool(layer_0, 1, 1)
+        w = lf.weight_variable([7*7*1024, 1000], name='pre_w_6')
+        return lf.leaky_relu(tf.matmul(tf.reshape(layer_1, [-1, 7*7*1024]), w))
+    return __sixth_block(x)

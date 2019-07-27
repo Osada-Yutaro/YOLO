@@ -15,13 +15,13 @@ def IoU(trgt, pred, sxt, syt, sxp, syp):
         return w*h/(wt*ht + wp*hp - w*h)
     return 0
 
-def precision(trgt, pred, cl, threshold):
+def precision(trgt, pred, threshold):
     tpfp = 0
     tp = 0
     for sxp in range(7):
         for syp in range(7):
             for bp in range(2):
-                if np.argmax(pred[sxp, syp, 0:20]) != cl or pred[sxp, syp, 20 + 5*bp + 4]*pred[sxp, syp, cl] < 0.5:
+                if pred[sxp, syp, 20 + 5*bp + 4] < 0.5:
                     continue
                 tpfp += 1
                 cont = False
@@ -34,7 +34,7 @@ def precision(trgt, pred, cl, threshold):
                         for bt in range(2):
                             if cont:
                                 continue
-                            if trgt[sxt, syt, cl] != 1. or trgt[sxt, syt, 20 + 5*bt + 4] == 0.:
+                            if trgt[sxt, syt, 20 + 5*bt + 4] == 0.:
                                 continue
                             iou = IoU(trgt[sxt, syt, 20 + 5*bt:20 + 5*(bt + 1)], pred[sxp, syp, 20 + 5*bp:20 + 5*(bp + 1)], sxt, syt, sxp, syp)
                             if iou >= threshold:
@@ -42,38 +42,36 @@ def precision(trgt, pred, cl, threshold):
                                 cont = True
     return tp, tpfp
 
-def find_match(trgt, boundingbox, cl, sxp, syp):
+def find_match(trgt, boundingbox, sxp, syp):
     for sxt in range(7):
         for syt in range(7):
             for bt in range(2):
-                if trgt[sxt, syt, cl] == 0. or trgt[sxt, syt, 20 + 5*bt + 4] == 0.:
+                if trgt[sxt, syt, 20 + 5*bt + 4] == 0.:
                     continue
                 iou = IoU(trgt[sxt, syt, 20 + 5*bt: 20 + 5*(bt + 1)], boundingbox, sxt, syt, sxp, syp)
                 if iou > 0.5:
                     return True
     return False
 
-def count_boxes(trgt, cl):
+def count_boxes(trgt):
     res = 0
     for sxt in range(7):
         for syt in range(7):
-            if trgt[sxt, syt, cl] == 0.:
-                continue
             for bt in range(2):
                 if trgt[sxt, syt, 20 + 5*bt + 4] == 1.:
                     res += 1
     return res
 
-def AP(trgt, pred, cl):
+def AP(trgt, pred):
     ls = []
     for sxp in range(7):
         for syp in range(7):
             for bp in range(2):
-                if np.argmax(pred[sxp, syp, 0:20]) != cl or pred[sxp, syp, 20 + 5*bp + 4]*pred[sxp, syp, cl] < 0.5:
+                if pred[sxp, syp, 20 + 5*bp + 4] < 0.5:
                     continue
                 bb = pred[sxp, syp, 20 + 5*bp:20 + 5*(bp + 1)]
-                p = pred[sxp, syp, cl]*pred[sxp, syp, 20 + 5*bp + 4]
-                ls.append((p, find_match(trgt, bb, cl, sxp, syp)))
+                p = pred[sxp, syp, 20 + 5*bp + 4]
+                ls.append((p, find_match(trgt, bb, sxp, syp)))
     standings = sorted(ls, reverse=True)
     r = 0
     s = 0
@@ -81,7 +79,7 @@ def AP(trgt, pred, cl):
         if standings[i][1]:
             s += (r + 1)/(i + 1)
             r += 1
-    count = count_boxes(trgt, cl)
+    count = count_boxes(trgt)
     if count == 0:
         return -1
     return s/count
@@ -92,23 +90,22 @@ def main(saved_model_dir, data_dir):
         model = graph_def.signature_def['serving_default']
         data = yolo.train.dataset.Data(data_dir)
 
-        for c in range(20):
-            print('class:', c)
-            batch = 0
-            batch_size = 64
-            sap = 0
-            s = 0
-            while batch < data.VALIDATION_DATA_SIZE:
-                next_batch = min(batch + batch_size, data.VALIDATION_DATA_SIZE)
-                img, trgt = data.load_validation(batch, next_batch)
-                pred = sess.run(model.outputs['result'].name, feed_dict={model.inputs['input'].name: img})
-                for i in range(next_batch - batch):
-                    ap = AP(trgt[i], pred[i], c)
-                    if ap != -1:
-                        sap += ap
-                        s += 1
-                batch = next_batch
-            print('mAP:', sap/s)
+        batch = 0
+        batch_size = 64
+        sap = 0
+        s = 0
+        while batch < data.VALIDATION_DATA_SIZE:
+            next_batch = min(batch + batch_size, data.VALIDATION_DATA_SIZE)
+            img, trgt = data.load_validation(batch, next_batch)
+            pred = sess.run(model.outputs['result'].name, feed_dict={model.inputs['input'].name: img})
+            for i in range(next_batch - batch):
+                ap = AP(trgt[i], pred[i])
+                if ap != -1:
+                    sap += ap
+                    s += 1
+            batch = next_batch
+        print('mAP:', sap/s)
+
 if __name__ == '__main__':
     m = sys.argv[1]
     d = sys.argv[2]

@@ -32,7 +32,10 @@ def random_shift(inp, oup):
                 up = y_mid - boundingbox[3]*height/2
                 down = y_mid + boundingbox[3]*height/2
 
-                if (boundingbox[4] == 1.) and (x_min < right < x_max or x_min < left < x_max) and (y_min < down < y_max or y_min < up < y_max):
+                inx = x_min < right < x_max or x_min < left < x_max
+                iny = y_min < down < y_max or y_min < up < y_max
+
+                if (boundingbox[4] == 1.) and inx and iny:
                     l_new = max(left, x_min)
                     r_new = min(right, x_max)
                     u_new = max(up, y_min)
@@ -52,8 +55,9 @@ def random_shift(inp, oup):
                     oup_new[sx_new, sy_new, C + 5*b + 3] = h_new
                     oup_new[sx_new, sy_new, C + 5*b + 4] = 1.
 
-                    oup_new[sx_new, sy_new, 0:C] = np.maximum(oup[sx, sy, 0:C], oup_new[sx_new, sy_new, 0:C])
-
+                    oup_new[sx_new, sy_new, 0:C] = np.maximum(
+                        oup[sx, sy, 0:C],
+                        oup_new[sx_new, sy_new, 0:C])
     return inp_new, oup_new
 
 def random_reverse(inp, oup):
@@ -63,14 +67,18 @@ def random_reverse(inp, oup):
     C = 20
     if random.randint(0, 255)%2 == 0:
         eye = np.eye(30, dtype='float32')[C] + np.eye(30, dtype='float32')[C + 5]
-        return cv2.flip(inp, 1), np.apply_along_axis(lambda x: (1 - eye)*x - eye*x + eye, 2, np.flip(oup, 0))
+        return cv2.flip(inp, 1), np.apply_along_axis(
+            lambda x: (1 - eye)*x - eye*x + eye,
+            2,
+            np.flip(oup, 0))
     return inp, oup
 
 def convert_X(data_dir, filename):
     import os
-    import numpy as np
     import cv2
-    return cv2.resize(cv2.imread(os.path.join(data_dir, 'JPEGImages', filename + '.jpg')), dsize=(448, 448)).astype('float32')
+    return cv2.resize(
+        cv2.imread(os.path.join(data_dir, 'JPEGImages', filename + '.jpg')),
+        dsize=(448, 448)).astype('float32')
 
 def convert_Y(data_dir, filename):
     import os

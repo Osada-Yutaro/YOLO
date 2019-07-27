@@ -16,6 +16,10 @@ def max_pool(x, r, step):
     import tensorflow as tf
     return tf.nn.max_pool(x, [1, r, r, 1], [1, step, step, 1], 'SAME')
 
+def avg_pool(x, r, step):
+    import tensorflow as tf
+    return tf.nn.avg_pool(x, [1, r, r, 1], [1, step, step, 1], 'SAME')
+
 def batch_normalization(x, shape, name):
     import tensorflow as tf
     with tf.variable_scope('yolo', reuse=tf.AUTO_REUSE):
@@ -27,6 +31,5 @@ def batch_normalization(x, shape, name):
         return tf.nn.batch_normalization(x, mean, variance, offset, scale, eps)
 
 def batch_normalized_conv2d(x, shape, step=1, name=None):
-    import tensorflow as tf
     conv = conv2d(x, shape, step, name)
     return batch_normalization(conv2d(x, shape, step, name), conv.shape[1:], name)

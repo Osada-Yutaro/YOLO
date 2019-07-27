@@ -86,29 +86,28 @@ def AP(trgt, pred, cl):
         return -1
     return s/count
 
-def main(saved_model_dir, data_dir):
-    with tf.Session() as sess:
-        graph_def = tf.saved_model.load(sess, [tf.saved_model.tag_constants.SERVING], saved_model_dir)
-        model = graph_def.signature_def['serving_default']
-        data = yolo.train.dataset.Data(data_dir)
+def main(tflite_model_path, data_dir):
+    tfl = tf.lite.Interpreter(tflite_model_path)
+    tfl.allocate_tensors()
+    data = yolo.train.dataset.Data(data_dir)
 
-        for c in range(20):
-            print('class:', c)
-            batch = 0
-            batch_size = 64
-            sap = 0
-            s = 0
-            while batch < data.VALIDATION_DATA_SIZE:
-                next_batch = min(batch + batch_size, data.VALIDATION_DATA_SIZE)
-                img, trgt = data.load_validation(batch, next_batch)
-                pred = sess.run(model.outputs['result'].name, feed_dict={model.inputs['input'].name: img})
-                for i in range(next_batch - batch):
-                    ap = AP(trgt[i], pred[i], c)
-                    if ap != -1:
-                        sap += ap
-                        s += 1
-                batch = next_batch
-            print('mAP:', sap/s)
+    for c in range(20):
+        print('class:', c)
+        sap = 0
+        s = 0
+        for i in range(data.VALIDATION_DATA_SIZE):
+            img, trgt = data.load_validation(i, i + 1)
+
+            input_index = tfl.get_input_details()[0]['index']
+            tfl.set_tensor(input_index, img)
+            tfl.invoke()
+            pred = tfl.get_tensor(tfl.get_output_details()[0]['index'])
+            ap = AP(trgt[0], pred[0], c)
+            if ap != -1:
+                sap += ap
+                s += 1
+        print('mAP:', sap/s)
+
 if __name__ == '__main__':
     m = sys.argv[1]
     d = sys.argv[2]

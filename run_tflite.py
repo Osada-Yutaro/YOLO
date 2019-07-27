@@ -9,3 +9,4 @@ input_index = tfl.get_input_details()[0]['index']
 output = tfl.tensor(tfl.get_output_details()[0]['index'])
 tfl.set_tensor(input_index, np.array([img]))
 tfl.invoke()
+print(output())
