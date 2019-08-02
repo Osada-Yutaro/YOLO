@@ -1,33 +1,30 @@
 def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
-    from ..architecture import constants as acons
     from .architecture import network
     from . import dataset
     import os
     import random
     import tensorflow as tf
 
-    S = acons.S
-    B = acons.B
-    C = acons.C
     BATCH_SIZE = 16
 
-    x = tf.placeholder(tf.float32, [None, 224, 224, 3])
-    y = tf.placeholder(tf.float32, [None, 1000])
-    learning_rate = tf.placeholder(tf.float32)
+    x = tf.compat.v1.placeholder(tf.float32, [None, 224, 224, 3])
+    y = tf.compat.v1.placeholder(tf.float32, [None, 1000])
+    learning_rate = tf.compat.v1.placeholder(tf.float32)
 
     ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
     y_pred = network.graph_def(x)
 
-    err_d = tf.reduce_sum(tf.square(y, y_pred))/BATCH_SIZE
-    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d)
+    err_d = tf.reduce_sum(tf.square(y - y_pred))/BATCH_SIZE
+    minimize = tf.compat.v1.train.GradientDescentOptimizer(learning_rate).minimize(err_d)
 
-    saver = tf.train.Saver()
+    saver = tf.compat.v1.train.Saver()
 
-    init = tf.global_variables_initializer()
+    init = tf.compat.v1.global_variables_initializer()
 
+    config = tf.compat.v1.ConfigProto(gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))
     data = dataset.Data(data_dir)
 
-    with tf.Session() as sess:
+    with tf.compat.v1.Session(config=config) as sess:
         if ckpt and ckpt.model_checkpoint_path:
             saver.restore(sess, os.path.join(checkpoint_dir, 'weights.ckpt'))
         else:
@@ -50,7 +47,7 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
                         learning_rate: lr})
                 count_train = nextcount
 
-            if epoch%10 == 0:
+            if epoch%1 == 0:
                 count_train = 0
                 err_train = 0
                 while count_train < data.TRAIN_DATA_SIZE:

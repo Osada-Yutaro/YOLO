@@ -1,0 +1,7 @@
+FROM tensorflow/tensorflow:1.14.0-gpu-py3
+RUN apt-get update && apt-get install -y git libsm6 libxrender-dev
+RUN pip3 install opencv-python
+RUN pip3 install requests
+RUN git clone https://github.com/Osada-Yutaro/YOLO.git
+WORKDIR /YOLO/BeforeTrain
+CMD python3 dl_imagenet.py ILSVRC2012_urls.txt 0 10000 ../../kw_resources/ImageNet

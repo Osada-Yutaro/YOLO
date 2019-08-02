@@ -1,0 +1,6 @@
+FROM tensorflow/tensorflow:1.14.0-gpu-py3
+RUN apt-get update && apt-get install -y git libsm6 libxrender-dev
+RUN pip3 install opencv-python
+RUN git clone https://github.com/Osada-Yutaro/YOLO.git
+WORKDIR /YOLO
+CMD (python3 pretrain.py '../kw_resources/ImageNet/' '../kw_resources/model/Checkpoints/' 1 1e-4 1) >> ../kw_resources/log.txt

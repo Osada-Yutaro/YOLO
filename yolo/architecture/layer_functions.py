@@ -1,7 +1,7 @@
 def weight_variable(shape, name):
     import tensorflow as tf
-    with tf.variable_scope('yolo', reuse=tf.AUTO_REUSE):
-        w = tf.get_variable(name, initializer=tf.truncated_normal(shape, stddev=0.03))
+    with tf.compat.v1.variable_scope('yolo', reuse=tf.compat.v1.AUTO_REUSE):
+        w = tf.compat.v1.get_variable(name, initializer=tf.random.truncated_normal(shape, stddev=0.03))
         return w
 
 def conv2d(x, shape, step=1, name=None):
@@ -14,11 +14,11 @@ def leaky_relu(x):
 
 def max_pool(x, r, step):
     import tensorflow as tf
-    return tf.nn.max_pool(x, [1, r, r, 1], [1, step, step, 1], 'SAME')
+    return tf.nn.max_pool2d(x, [1, r, r, 1], [1, step, step, 1], 'SAME')
 
 def avg_pool(x, r, step):
     import tensorflow as tf
-    return tf.nn.avg_pool(x, [1, r, r, 1], [1, step, step, 1], 'SAME')
+    return tf.nn.avg_pool2d(x, [1, r, r, 1], [1, step, step, 1], 'SAME')
 
 def batch_normalization(x, shape, name):
     import tensorflow as tf

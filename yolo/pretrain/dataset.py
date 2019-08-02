@@ -11,15 +11,18 @@ class Data:
         f_tr.close()
         f_vl.close()
 
+        print(self.DATA_DIR)
+
     def load_train(self, start_index, end_index):
         import os
         import numpy as np
         import cv2
+        eye = np.eye(1000)
         x_data = np.array(list(map(
-            lambda s: cv2.imread(os.path.join(self.DATA_DIR, s) + '.png'),
+            lambda s: cv2.resize(cv2.imread(os.path.join(self.DATA_DIR, 'Images', s) + '.png'), (224, 224)),
             self.TRAIN_LIST[start_index:end_index])))
         y_data = np.array(list(map(
-            lambda s: float(s.split('_')[0]),
+            lambda s: eye[int(s.split('_')[0])],
             self.TRAIN_LIST[start_index:end_index])))
         return x_data, y_data
 
@@ -27,11 +30,12 @@ class Data:
         import os
         import numpy as np
         import cv2
+        eye = np.eye(1000)
         x_data = np.array(list(map(
-            lambda s: cv2.imread(os.path.join(self.DATA_DIR, s) + '.png'),
+            lambda s: cv2.resize(cv2.imread(os.path.join(self.DATA_DIR, 'Images', s) + '.png'), (224, 224)),
             self.VALIDATION_LIST[start_index:end_index])))
         y_data = np.array(list(map(
-            lambda s: float(s.split('_')[0]),
+            lambda s: eye[int(s.split('_')[0])],
             self.VALIDATION_LIST[start_index:end_index])))
         return x_data, y_data
 
