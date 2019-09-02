@@ -47,7 +47,7 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
                         learning_rate: lr})
                 count_train = nextcount
 
-            if epoch%1 == 0:
+            if epoch%10 == 0:
                 count_train = 0
                 err_train = 0
                 while count_train < data.TRAIN_DATA_SIZE:
