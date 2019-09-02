@@ -16,8 +16,8 @@ def loss_w():
         return err
 
 def position_loss(trgt, pred):
-    from ..architecture import constants as const
-    from . import constants as trcon
+    from yolo.architecture import constants as const
+    from yolo.train import constants as trcon
     import tensorflow as tf
     B = const.B
     C = const.C
@@ -34,8 +34,8 @@ def position_loss(trgt, pred):
     return x_loss + y_loss
 
 def size_loss(trgt, pred):
-    from ..architecture import constants as const
-    from . import constants as trcon
+    from yolo.architecture import constants as const
+    from yolo.train import constants as trcon
     import tensorflow as tf
     B = const.B
     C = const.C
@@ -48,13 +48,17 @@ def size_loss(trgt, pred):
     h_pred = tf.nn.relu(pred[:, :, :, C + 3:C + 5*B:5])
 
     eps = 1e-1
-    w_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(w_trgt + eps) - tf.sqrt(w_pred + eps))*confi_trgt)
-    h_loss = LAMBDA_COORD*tf.reduce_sum(tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt)
+    w_loss = LAMBDA_COORD*tf.reduce_sum(
+        tf.square(tf.sqrt(w_trgt + eps) - tf.sqrt(w_pred + eps))*confi_trgt
+        )
+    h_loss = LAMBDA_COORD*tf.reduce_sum(
+        tf.square(tf.sqrt(h_trgt + eps) - tf.sqrt(h_pred + eps))*confi_trgt
+        )
     return w_loss + h_loss
 
 def confidence_loss(trgt, pred):
-    from ..architecture import constants as const
-    from . import constants as trcon
+    from yolo.architecture import constants as const
+    from yolo.train import constants as trcon
     import tensorflow as tf
     B = const.B
     C = const.C
@@ -64,20 +68,25 @@ def confidence_loss(trgt, pred):
     confi_pred = pred[:, :, :, C + 4:C + 5*B:5]
 
     confi_loss_obj = tf.reduce_sum(tf.square(confi_trgt - confi_pred)*confi_trgt)
-    confi_loss_noobj = LAMBDA_NOOBJ*tf.reduce_sum(tf.square(confi_trgt - confi_pred)*(1 - confi_trgt))
+    confi_loss_noobj = LAMBDA_NOOBJ*tf.reduce_sum(
+        tf.square(confi_trgt - confi_pred)*(1 - confi_trgt)
+        )
 
     return confi_loss_obj + confi_loss_noobj
 
 def class_loss(trgt, pred, D):
-    from ..architecture import constants as const
-    from . import constants as trcon
+    from yolo.architecture import constants as const
     import tensorflow as tf
     S = const.S
     C = const.C
     p_trgt = trgt[:, :, :, 0:C]
     p_pred = pred[:, :, :, 0:C]
-    pred_loss = tf.reduce_sum(tf.square(p_trgt - p_pred)*tf.reshape(tf.reduce_max(p_trgt, axis=[3]), [D, S, S, 1]))
-    return pred_loss
+    return tf.reduce_sum(
+        tf.square(p_trgt - p_pred)*tf.reshape(tf.reduce_max(p_trgt, axis=[3]), [D, S, S, 1])
+        )
 
 def loss_d(trgt, pred, D):
-    return position_loss(trgt, pred) + size_loss(trgt, pred) + confidence_loss(trgt, pred) + class_loss(trgt, pred, D)
+    return (position_loss(trgt, pred) +
+            size_loss(trgt, pred) +
+            confidence_loss(trgt, pred) +
+            class_loss(trgt, pred, D))

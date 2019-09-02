@@ -1,5 +1,5 @@
 def random_shift(inp, oup):
-    from ..architecture import constants as const
+    from yolo.architecture import constants as const
     import random
     import numpy as np
     import cv2
