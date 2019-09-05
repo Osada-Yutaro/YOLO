@@ -24,11 +24,11 @@ def avg_pool(x, r, step):
 
 def batch_normalization(x, shape, name):
     import tensorflow as tf
-    with tf.variable_scope('yolo', reuse=tf.AUTO_REUSE):
+    with tf.compat.v1.variable_scope('yolo', reuse=tf.compat.v1.AUTO_REUSE):
         mean = tf.reduce_mean(x, axis=0)
         variance = tf.reduce_mean(tf.square(x - mean))
-        offset = tf.get_variable(name + '_offset', initializer=tf.zeros(shape))
-        scale = tf.get_variable(name + '_scale', initializer=tf.ones(shape))
+        offset = tf.compat.v1.get_variable(name + '_offset', initializer=tf.zeros(shape))
+        scale = tf.compat.v1.get_variable(name + '_scale', initializer=tf.ones(shape))
         eps = 1e-4
         return tf.nn.batch_normalization(x, mean, variance, offset, scale, eps)
 

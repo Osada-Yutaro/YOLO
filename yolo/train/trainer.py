@@ -18,24 +18,26 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
     import random
     import tensorflow as tf
 
-    x = tf.placeholder(tf.float32, [None, 448, 448, 3])
-    y = tf.placeholder(tf.float32, [None, acons.S, acons.S, 5*acons.B + acons.C])
-    D = tf.placeholder(tf.int32)
-    keep_prob = tf.placeholder(tf.float32)
-    learning_rate = tf.placeholder(tf.float32)
+    tf.compat.v1.disable_v2_behavior()
+
+    x = tf.compat.v1.placeholder(tf.float32, [None, 448, 448, 3])
+    y = tf.compat.v1.placeholder(tf.float32, [None, acons.S, acons.S, 5*acons.B + acons.C])
+    D = tf.compat.v1.placeholder(tf.int32)
+    keep_prob = tf.compat.v1.placeholder(tf.float32)
+    learning_rate = tf.compat.v1.placeholder(tf.float32)
 
     y_pred = network.graph_def(x, keep_prob)
 
     err_d = loss_functions.loss_d(y, y_pred, D)/tcons.BATCH_SIZE
-    minimize = tf.train.GradientDescentOptimizer(learning_rate).minimize(err_d)
+    minimize = tf.compat.v1.train.GradientDescentOptimizer(learning_rate).minimize(err_d)
 
-    saver = tf.train.Saver()
+    saver = tf.compat.v1.train.Saver()
 
-    init = tf.global_variables_initializer()
+    init = tf.compat.v1.global_variables_initializer()
 
     data = dataset.VOCData(data_dir)
 
-    with tf.Session() as sess:
+    with tf.compat.v1.Session() as sess:
         restore(sess, saver, init, checkpoint_dir)
         random.seed()
         if start_epoch == 1:
