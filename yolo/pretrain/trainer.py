@@ -62,4 +62,4 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
 
                 print(epoch, err_train, err_validation, lr)
                 os.mkdir(os.path.join(checkpoint_dir, str(epoch)))
-                saver.save(sess, os.path.join(checkpoint_dir, str(epoch)))
+                saver.save(sess, os.path.join(checkpoint_dir, str(epoch), 'weights.ckpt'))
