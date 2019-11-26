@@ -32,7 +32,8 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
             data.shuffle()
 
             count_train = 0
-            while count_train < data.TRAIN_DATA_SIZE:
+            #while count_train < data.TRAIN_DATA_SIZE:
+            while count_train < 128:
                 nextcount = min(count_train + BATCH_SIZE, data.TRAIN_DATA_SIZE)
                 x_train, y_train = data.load_train(count_train, nextcount)
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, learning_rate: lr})
@@ -41,7 +42,8 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
             if epoch%1 == 0:
                 count_train = 0
                 err_train = 0
-                while count_train < data.TRAIN_DATA_SIZE:
+                #while count_train < data.TRAIN_DATA_SIZE:
+                while count_train < 128:
                     nextcount = min(count_train + BATCH_SIZE, data.TRAIN_DATA_SIZE)
                     x_train, y_train = data.load_train(count_train, nextcount)
                     err_train += sess.run(err_d*BATCH_SIZE/data.TRAIN_DATA_SIZE,
@@ -50,7 +52,8 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
 
                 count_validation = 0
                 err_validation = 0
-                while count_validation < data.VALIDATION_DATA_SIZE:
+                #while count_validation < data.VALIDATION_DATA_SIZE:
+                while count_validation < 128:
                     nextcount = min(count_validation + BATCH_SIZE, data.VALIDATION_DATA_SIZE)
                     x_validation, y_validation = data.load_validation(count_validation, nextcount)
                     err_validation += sess.run(err_d*BATCH_SIZE/data.VALIDATION_DATA_SIZE,
