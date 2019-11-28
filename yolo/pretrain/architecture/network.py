@@ -8,7 +8,7 @@ def graph_def(x):
         layer_2 = lf.leaky_relu(lf.conv2d(layer_1, [3, 3, 512, 1024], name='w_5_2'))
         layer_3 = lf.leaky_relu(lf.conv2d(layer_2, [1, 1, 1024, 512], name='w_5_3'))
         layer_4 = lf.leaky_relu(lf.conv2d(layer_3, [3, 3, 512, 1024], name='w_5_4'))
-        layer_5 = tf.nn.avg_pool(layer_4, [1, 1, 1, 1024], [1, 1, 1, 1], 'SAME')
+        layer_5 = tf.reduce_mean(layer_4, [1, 2])
         w = lf.weight_variable([1024, 1000], name='pre_w_6')
         return lf.leaky_relu(tf.matmul(tf.reshape(layer_5, [-1, 1024]), w))
     return __fifth_block(x)
