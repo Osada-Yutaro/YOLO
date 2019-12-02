@@ -17,7 +17,7 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
     err_d = tf.reduce_sum(tf.square(y - y_pred))
     minimize = tf.compat.v1.train.MomentumOptimizer(learning_rate=lr, momentum=0.9).minimize(err_d)
 
-    saver = tf.compat.v1.train.Saver(max_to_keep=10)
+    saver = tf.compat.v1.train.Saver()
     init = tf.compat.v1.global_variables_initializer()
     config = tf.compat.v1.ConfigProto(gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))
     data = ImageNetData(data_dir)
