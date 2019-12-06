@@ -24,11 +24,13 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
 
     with tf.compat.v1.Session(config=config) as sess:
         random.seed()
+        """
         if start_epoch == 1:
             print('#epoch, training error, validation error, learning rate')
             sess.run(init)
         else:
             saver.restore(sess, os.path.join(checkpoint_dir, str(-start_epoch + 1)))
+        """
 
         for epoch in range(start_epoch, start_epoch + epoch_size, 10):
             data.shuffle()
