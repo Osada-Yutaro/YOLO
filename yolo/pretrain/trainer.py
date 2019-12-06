@@ -30,15 +30,18 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
         else:
             saver.restore(sess, os.path.join(checkpoint_dir, str(-start_epoch + 1)))
 
-        for epoch in range(start_epoch, start_epoch + epoch_size):
+        for epoch in range(start_epoch, start_epoch + epoch_size, 10):
             data.shuffle()
+            saver.restore(sess, os.path.join(checkpoint_dir, str(epoch)))
 
+            """
             count_train = 0
             while count_train < data.TRAIN_DATA_SIZE:
                 nextcount = min(count_train + BATCH_SIZE, data.TRAIN_DATA_SIZE)
                 x_train, y_train = data.load_train(count_train, nextcount)
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, learning_rate: lr})
                 count_train = nextcount
+            """
 
             if epoch%10 == 0:
                 count_train = 0
@@ -60,4 +63,4 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
                     count_validation = nextcount
 
                 print(epoch, err_train/data.TRAIN_DATA_SIZE, err_validation/data.VALIDATION_DATA_SIZE, lr)
-                saver.save(sess, checkpoint_dir, global_step=epoch)
+                #saver.save(sess, checkpoint_dir, global_step=epoch)
