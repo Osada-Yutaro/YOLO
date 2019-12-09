@@ -30,7 +30,7 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
         else:
             saver.restore(sess, os.path.join(checkpoint_dir, str(-start_epoch + 1)))
 
-        for epoch in range(start_epoch, start_epoch + epoch_size, 10):
+        for epoch in range(start_epoch, start_epoch + epoch_size):
             data.shuffle()
 
             count_train = 0
