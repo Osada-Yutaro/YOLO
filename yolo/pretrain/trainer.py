@@ -36,7 +36,7 @@ def fit(data_dir, checkpoint_dir, epoch_size=10, lr=1e-4, start_epoch=1):
             count_train = 0
             while count_train < data.TRAIN_DATA_SIZE:
                 nextcount = min(count_train + BATCH_SIZE, data.TRAIN_DATA_SIZE)
-                x_train, y_train = data.load_train(count_train, nextcount)
+                x_train, y_train = data.load_train(count_train, nextcount, True)
                 sess.run(minimize, feed_dict={x: x_train, y: y_train, learning_rate: lr})
                 count_train = nextcount
 

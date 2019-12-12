@@ -5,6 +5,7 @@ class ImageNetData(__Data):
         import os
         import numpy as np
         import cv2
+        from yolo.train import preprocessing as pp
         eye = np.eye(1000)
         x_data = np.array(list(map(
             lambda s: cv2.resize(
@@ -14,6 +15,10 @@ class ImageNetData(__Data):
         y_data = np.array(list(map(
             lambda s: eye[int(s.split('_')[0])],
             self.TRAIN_LIST[start_index:end_index])))
+        if prepro:
+            for i in range(end_index - start_index):
+                x_data[i], y_data[i] = pp.random_shift(x_data[i], y_data[i])
+                x_data[i], y_data[i] = pp.random_reverse(x_data[i], y_data[i])
         return x_data, y_data
 
     def load_validation(self, start_index, end_index):
