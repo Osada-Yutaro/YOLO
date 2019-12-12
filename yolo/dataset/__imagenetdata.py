@@ -21,7 +21,7 @@ class ImageNetData(__Data):
                 r = int(224 - 224*random.random()/10)
                 u = int(224*random.random()/10)
                 b = int(224 - 224*random.random()/10)
-                x_data[i] = x_data[i, l:r, u:b]
+                x_data[i] = cv2.resize(x_data[i, l:r, u:b], 224, 224)
         return x_data, y_data
 
     def load_validation(self, start_index, end_index):
